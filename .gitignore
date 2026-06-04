@@ -11,3 +11,4 @@ dist/
 .env.vercel
 node_modules/
 dist/
+src/components/kavalan/.env

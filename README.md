@@ -76,7 +76,7 @@ To use real Whisper / GPT-4o-mini / DALL-E 3, create a backend server and set th
 | Name | Role |
 |---|---|
 | Nithyarajan N.C | Team Leader |
-| Muthamizharasi N | Member |
+| Hemalatha M | Member |
 | Barath G | Member |
 | Bhagesri Ranjna V | Member |
 

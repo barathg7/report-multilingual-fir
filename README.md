@@ -1,35 +1,75 @@
 # REPORT — Real-time Evidence Processing for Official Record Transcription
 
-**Team WhiteCoders · Adhiparashakthi College of Engineering, Kalavai · HACKXELERATE**
+🚀 **Live Demo:** https://report-fresh-five.vercel.app
+📂 **GitHub:** https://github.com/barathg7/report-multilingual-fir
+🏆 **HACKXELERATE Project** — Team WhiteCoders · Adhiparashakthi College of Engineering, Kalavai
+
+---
 
 An AI-powered, multilingual First Information Report (FIR) filing system with a dual portal — citizens file complaints by voice in their own language, and police officers triage, verify and download official state-specific FIR documents through a station-scoped dashboard.
 
 ---
 
-## 🚀 Quick Start
+## 📸 Screenshots
 
-```bash
-# 1. Extract the ZIP
-# 2. Open a terminal inside the REPORT_FRESH folder
-npm install
-npm run dev
-# Open http://localhost:5173
-```
+### Citizen Portal — Voice FIR Filing
+| Landing Page | Voice Recording | FIR Preview |
+|---|---|---|
+| ![Landing](screenshots/landing-page.png) | ![Voice](screenshots/voice-recording.png) | ![FIR](screenshots/fir-preview.png) |
 
-For the FIR-document download to work from the **police** portal you also need the Python serverless function dependency:
+### Police Portal
+| Police Dashboard | Crime Analytics |
+|---|---|
+| ![Dashboard](screenshots/police-dashboard.png) | ![Analytics](screenshots/crime-analytics.png) |
 
-```bash
-# create api/requirements.txt with:
-python-docx==1.1.2
-```
+> 📁 Add your screenshots to a `screenshots/` folder in the root of the repo.
 
-(Vercel runs `api/generate-fir.py` automatically — no separate `npm install` needed for it.)
+---
+
+## 👥 Team WhiteCoders
+
+| Name | Role | GitHub |
+|---|---|---|
+| Nithyarajan N.C | Team Leader | [@Nithyarajan-ctrl](https://github.com/Nithyarajan-ctrl) |
+| Hemalatha M | Member | — |
+| Barath G | Member | [@barathg7](https://github.com/barathg7) |
+| Bhagesri Ranjana V | Member | [@Bhagesri01](https://github.com/Bhagesri01) |
+
+---
+
+## 🤝 Individual Contributions
+
+### Barath G — [@barathg7](https://github.com/barathg7)
+- Frontend development (React 18 + Vite + Tailwind CSS)
+- Voice recording & Groq AI extraction pipeline
+- MapTiler satellite map with GPS, landmark search and POI detection
+- AI suspect sketch cascade (5-provider system)
+- GitHub repository setup and management
+- Vercel deployment, CI/CD and environment configuration
+
+### Nithyarajan N.C — [@Nithyarajan-ctrl](https://github.com/Nithyarajan-ctrl)
+- Project architecture and system design
+- Dual-portal routing (citizen + police)
+- BNS 2023 legal section classification logic
+- Emergency SOS module and Twilio / Fast2SMS integration
+
+### Bhagesri Ranjana V — [@Bhagesri01](https://github.com/Bhagesri01)
+- Documentation and README
+- UI validation and accessibility testing
+- 28-state FIR template validation
+- Offline-first storage and sync logic
+
+### Hemalatha M
+- Supabase database schema design
+- Police-station directory (3,447 stations)
+- Station isolation and jurisdiction logic
+- QA testing and bug reporting
 
 ---
 
 ## 🔑 Environment Variables
 
-Create a `.env` file in the project root (and add the same keys in **Vercel → Project Settings → Environment Variables** before deploying):
+Create a `.env` file in the project root and add the same keys in **Vercel → Project Settings → Environment Variables**:
 
 | Variable | Required | Used for |
 |---|---|---|
@@ -37,13 +77,16 @@ Create a `.env` file in the project root (and add the same keys in **Vercel → 
 | `VITE_SUPABASE_URL` | ✅ Yes | Database — FIR storage, police-station lookup |
 | `VITE_SUPABASE_ANON_KEY` | ✅ Yes | Database — public anon key |
 | `VITE_MAPTILER_KEY` | ✅ Yes | Satellite / hybrid / street crime-scene map |
+| `FAST2SMS_API_KEY` | ✅ Yes | Emergency SOS SMS to Indian police numbers (+91) |
+| `TWILIO_ACCOUNT_SID` | Optional | Emergency SOS SMS fallback (international numbers) |
+| `TWILIO_AUTH_TOKEN` | Optional | Twilio authentication |
+| `TWILIO_PHONE_NUMBER` | Optional | Twilio sender number |
 | `VITE_CF_AI_TOKEN` + `VITE_CF_ACCOUNT_ID` | Optional | Suspect sketch — primary provider (Cloudflare Workers AI) |
 | `VITE_NGC_API_KEY` | Optional | Suspect sketch — backup provider (NVIDIA NIM SDXL) |
 | `VITE_NGC_FLUX_API_KEY` | Optional | Suspect sketch — backup provider (NVIDIA NIM Flux) |
 
-> Sketch generation always works even with **zero** keys set — it automatically falls through to **Pollinations AI** and then **Hugging Face**, both free and key-less.
-
-The Supabase project also needs two tables (`firs`, `police_stations`) with Row Level Security policies — run the schema SQL in the Supabase SQL Editor before first use (see *Database Setup* below).
+> **Sketch** always works with zero keys — falls through to free **Pollinations AI** then **Hugging Face** automatically.
+> **Fast2SMS** is the recommended SMS provider for Indian numbers. Get a free API key at [fast2sms.com](https://fast2sms.com).
 
 ---
 
@@ -52,11 +95,11 @@ The Supabase project also needs two tables (`firs`, `police_stations`) with Row 
 | | Citizen Portal | Police Portal |
 |---|---|---|
 | Entry | Landing page → "File a Complaint" | Landing page → "Police Login" |
-| Auth | None | Station code + password (`verifyStation` / `verifyStationLogin`) |
+| Auth | None (session-scoped) | Station code + password |
 | Core flow | 7-step guided FIR filing | Station-scoped FIR dashboard |
-| Data scope | Own submissions (local + cloud) | **Only** FIRs whose `station_code` matches the logged-in station — Katpadi PS never sees Vellore PS cases, etc. |
-| Document | Client-side `.docx` generation (`FIRDownload.jsx`, uses the `docx` + `file-saver` packages — no server call) | Server-side `.docx` generation (`POST /api/generate-fir`, Python + `python-docx`) |
-| Extra actions | — | Update status (`submitted → investigating → resolved → closed`), flag **Fake FIR** (shows applicable BNS sections & punishment for false complaints) |
+| Data scope | Own session's FIRs only (privacy-scoped by `sessionId`) | Only FIRs whose `station_code` matches the logged-in station |
+| Document | Client-side `.docx` generation (no server call) | Server-side `.docx` via `POST /api/generate-fir` |
+| Extra actions | Emergency SOS button | Update status, flag Fake FIR, download official document |
 
 ---
 
@@ -64,18 +107,43 @@ The Supabase project also needs two tables (`firs`, `police_stations`) with Row 
 
 | Capability | Technology |
 |---|---|
-| Frontend framework | React 18 + Vite + Tailwind CSS, routed with React Router v6 (`HashRouter`) |
-| Voice capture | Browser **SpeechRecognition** Web API — no key, works in Chrome — supports **50 languages** (22 official Indian languages + 28 international/tourist languages) |
-| Speech correction + extraction | **Groq** (`llama-3.3-70b-versatile`, with 3 automatic backup models) via `GroqManager.jsx` — fixes garbled transcription, resolves relative dates/times ("yesterday at 7pm" → exact date + 24h time), extracts complainant + incident fields, classifies the crime and assigns the correct legal sections |
-| Legal code | **Bharatiya Nyaya Sanhita (BNS) 2023** — `bnsValidator.js` (current law; `ipcValidator.js` is kept in the repo only as legacy reference and is not used by the live flow) |
-| Crime-scene map | **MapTiler SDK** (hybrid / satellite / streets / topo styles) with a triple-fallback geocoder — MapTiler → Nominatim (Tamil-Nadu-biased) → Photon — plus **Overpass API** for nearby-landmark labels, GPS auto-detect, and a draggable confirm-pin |
-| AI suspect sketch | 5-provider cascade, fully automatic: **Cloudflare Workers AI** → **NVIDIA NIM (SDXL)** → **NVIDIA NIM (Flux)** → **Pollinations AI** (free) → **Hugging Face** (free) |
-| Official FIR document | 28 state/UT NCRB-style `.docx` templates (`public/fir_templates/`), auto-selected by the GPS-detected state. Citizen side fills it client-side; police side fills it via `api/generate-fir.py` |
-| Database / dual-portal sync | **Supabase** (Postgres) — FIRs are written with the filing station's `station_code`, so each station's dashboard query is pre-filtered to its own jurisdiction; duplicate-complaint guard by phone + incident date |
-| Police station directory | `policeStations.js` — **3,447** pre-loaded stations across India with lat/lng, used for nearest-station lookup, GPS→state detection, and login verification |
-| Digital signature | Canvas-based signature pad for complainant + investigating officer |
-| Offline support | `useFIRStore` — FIRs save to `localStorage` first and sync to Supabase automatically when back online |
-| Security / emergency module | `EmergencySecurity.jsx` — 4-digit PIN app-lock screen, panic SOS timer, scheduled alarms. Ships as a self-contained drop-in component (see *Enabling the Security Module* below) |
+| Frontend | React 18 + Vite + Tailwind CSS, React Router v6 (`HashRouter`) |
+| Voice capture | Browser **SpeechRecognition** API — 50 languages (22 Indian + 28 international) |
+| Speech correction + extraction | **Groq** `llama-3.3-70b-versatile` via `GroqManager.jsx` — fixes garbled speech, resolves "yesterday at 7pm" → exact date/time, extracts all FIR fields |
+| Legal sections | **Bharatiya Nyaya Sanhita (BNS) 2023** — `bnsValidator.js` |
+| Crime-scene map | **MapTiler SDK** (satellite/hybrid/streets/topo) + triple-geocoder (MapTiler → Nominatim → Photon) + Overpass API POI labels |
+| AI suspect sketch | 5-provider cascade: **Cloudflare Workers AI** → **NVIDIA NIM SDXL** → **NVIDIA NIM Flux** → **Pollinations AI** → **Hugging Face** |
+| FIR documents | 28 state/UT NCRB `.docx` templates, auto-selected by GPS state |
+| Emergency SOS | `EmergencySecurity.jsx` — GPS → nearest station lookup → **Fast2SMS** (Indian) / Twilio (international) |
+| Database | **Supabase** Postgres — station-isolated FIR storage, RLS policies, duplicate check |
+| Station directory | `policeStations.js` — **3,447 stations** across India with lat/lng |
+| Privacy | Session-scoped FIR display (`sessionStorage` ID) — each citizen sees only their own FIRs |
+| Offline | `useFIRStore` — `localStorage`-first, auto-syncs to Supabase when back online |
+| Deployment | **Vercel** (frontend SPA + Python serverless fn for FIR docs) |
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/barathg7/report-multilingual-fir.git
+cd report-multilingual-fir
+
+# 2. Install dependencies
+npm install
+
+# 3. Create .env file with your API keys (see Environment Variables above)
+
+# 4. Start development server
+npm run dev
+# Open http://localhost:5173
+```
+
+For the FIR-document download to work from the police portal, add:
+```
+api/requirements.txt  →  python-docx==1.1.2
+```
 
 ---
 
@@ -84,53 +152,47 @@ The Supabase project also needs two tables (`firs`, `police_stations`) with Row 
 ```
 REPORT_FRESH/
 ├── api/
-│   └── generate-fir.py          ← Vercel serverless fn: fills the matching state .docx template
+│   ├── generate-fir.py        ← Vercel serverless: fills matching state .docx
+│   └── send-sos.js            ← Vercel serverless: SMS via Fast2SMS / Twilio
 ├── public/
-│   └── fir_templates/            ← 28 official state/UT FIR .docx templates
+│   └── fir_templates/         ← 28 official state/UT FIR .docx templates
+├── screenshots/               ← App screenshots (add yours here)
 ├── src/
-│   ├── App.jsx                   ← HashRouter — citizen + police routes
-│   ├── Layout.jsx                ← Citizen-portal shell (sidebar / bottom nav, online badge)
-│   ├── main.jsx
-│   ├── index.css
+│   ├── App.jsx                ← HashRouter routing, SOS FAB (hidden during filing)
+│   ├── Layout.jsx             ← Citizen-portal shell
 │   │
 │   ├── pages/
-│   │   ├── LandingPage.jsx       ← Choose Citizen / Police
-│   │   ├── Home.jsx              ← Citizen marketing/landing
-│   │   ├── Dashboard.jsx         ← Citizen FIR summary
-│   │   ├── RecordStatement.jsx   ← 7-step guided FIR filing (Language → Record → Details →
-│   │   │                            Incident → Location → Evidence → FIR)
-│   │   ├── FIRHistory.jsx        ← Citizen's past FIRs
-│   │   ├── PoliceLogin.jsx       ← Station code + password login
-│   │   ├── PoliceDashboard.jsx   ← Station-scoped FIR list, status updates, fake-FIR flag, download
-│   │   └── Analytics.jsx         ← Station-scoped crime statistics
+│   │   ├── LandingPage.jsx    ← Choose Citizen / Police
+│   │   ├── Home.jsx
+│   │   ├── Dashboard.jsx      ← Session-scoped citizen FIR summary
+│   │   ├── RecordStatement.jsx← 7-step guided FIR filing
+│   │   ├── FIRHistory.jsx
+│   │   ├── PoliceLogin.jsx    ← Station code + password login
+│   │   ├── PoliceDashboard.jsx← Station-scoped FIR list + download + fake FIR flag
+│   │   └── Analytics.jsx      ← Station-scoped crime statistics
 │   │
-│   ├── components/
-│   │   ├── ui/                   ← Button, Input, Select, Textarea, Card, Badge, StepBar
-│   │   └── kavalan/
-│   │       ├── VoiceRecorder.jsx     ← Mic capture + Groq correction/extraction + BNS mapping
-│   │       ├── GroqManager.jsx       ← Groq API client with model-cascade + retry/backoff
-│   │       ├── LocationCapture.jsx   ← MapTiler map, GPS, triple-source search, POI labels
-│   │       ├── PhotoUpload.jsx       ← Evidence photo/video attach
-│   │       ├── SuspectSketch.jsx     ← 5-provider AI sketch cascade
-│   │       ├── DigitalSignature.jsx  ← Canvas signature pad
-│   │       ├── FIRDocument.jsx       ← On-screen FIR preview
-│   │       ├── FIRDownload.jsx       ← Client-side state-specific .docx generator
-│   │       └── EmergencySecurity.jsx ← PIN lock + SOS timer + alarms (drop-in, see below)
+│   ├── components/kavalan/
+│   │   ├── VoiceRecorder.jsx     ← Mic + Groq correction + BNS mapping
+│   │   ├── GroqManager.jsx       ← Groq API client, model cascade, retry
+│   │   ├── LocationCapture.jsx   ← MapTiler map, GPS, search, POI labels
+│   │   ├── PhotoUpload.jsx       ← Evidence attach
+│   │   ├── SuspectSketch.jsx     ← 5-provider AI sketch cascade
+│   │   ├── DigitalSignature.jsx  ← Canvas signature pad
+│   │   ├── FIRDocument.jsx       ← On-screen FIR preview
+│   │   ├── FIRDownload.jsx       ← Client-side state .docx generator
+│   │   └── EmergencySecurity.jsx ← SOS panel (GPS → nearest station → SMS)
 │   │
 │   ├── hooks/
-│   │   └── useFIRStore.js        ← localStorage-first FIR state, auto-sync to Supabase, duplicate check
-│   │
+│   │   └── useFIRStore.js     ← Session-scoped localStorage + Supabase sync
 │   ├── lib/
-│   │   └── supabaseClient.js     ← saveFIRToSupabase, getFIRsForStation, updateFIRStatus,
-│   │                                verifyStationLogin, checkDuplicateFIR
-│   │
+│   │   ├── supabaseClient.js  ← DB functions
+│   │   └── findNearestStation.js ← Haversine nearest-station lookup
 │   └── utils/
-│       ├── index.js              ← cn(), formatDate(), generateFIRId(), storage helpers
-│       ├── bnsValidator.js       ← live BNS section suggestion/validation (in use)
-│       ├── ipcValidator.js       ← legacy IPC reference (not used by the live flow)
-│       └── policeStations.js     ← 3,447-station directory + state templates + GPS lookup helpers
+│       ├── bnsValidator.js    ← BNS 2023 section validation (live)
+│       ├── ipcValidator.js    ← Legacy IPC reference (unused)
+│       └── policeStations.js  ← 3,447-station directory
 │
-├── vercel.json                   ← rewrites /api/* to the Python fn, everything else to index.html
+├── vercel.json                ← SPA rewrite + /api/* routing
 └── package.json
 ```
 
@@ -138,104 +200,36 @@ REPORT_FRESH/
 
 ## 🗄️ Database Setup (Supabase)
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, create the `firs` and `police_stations` tables with Row Level Security policies that allow:
-   - anyone to `insert`/`select` on `firs` (citizens file, police read only their station's rows, filtered client-side by `station_code`)
-   - anyone to `select` on `police_stations`
-3. Seed `police_stations` with the entries from `src/utils/policeStations.js` (or your own subset).
-4. Copy the **Project URL** and **anon public key** into `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
+1. Create a free project at [supabase.com](https://supabase.com)
+2. In **SQL Editor**, create `firs` and `police_stations` tables with RLS policies:
+   - anyone can `insert`/`select` on `firs`
+   - anyone can `select` on `police_stations`
+3. Seed `police_stations` from `src/utils/policeStations.js`
+4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to your env
 
 ---
 
-## 🔐 Enabling the Security Module
+## 🔐 Emergency SOS Module
 
-`EmergencySecurity.jsx` is included in the project but is **not** wired into `App.jsx` by default. To use it as an app-wide PIN lock with a floating SOS button:
+The SOS button appears on all citizen pages except during FIR filing (to avoid covering the Next button). When tapped:
 
-```jsx
-import { useState } from "react";
-import EmergencySecurity from "@/components/kavalan/EmergencySecurity";
+1. Gets victim's GPS coordinates
+2. Queries Supabase for the **3 nearest police stations** (Haversine distance)
+3. Sends SMS via **Fast2SMS** (Indian numbers) or **Twilio** (fallback)
+4. Displays station name, distance and delivery status
 
-export default function App() {
-  const [authed, setAuthed] = useState(false);
-  const [showEmergency, setShowEmergency] = useState(false);
-
-  if (!authed) {
-    return <EmergencySecurity onAuthenticated={() => setAuthed(true)} />;
-  }
-
-  return (
-    <>
-      {/* ...your existing routes... */}
-      <button onClick={() => setShowEmergency(true)} className="es-fab">🚨</button>
-      <EmergencySecurity embedded showPanel={showEmergency} onClosePanel={() => setShowEmergency(false)} />
-    </>
-  );
-}
-```
-
-Default PIN: **`1947`** (change the `DEFAULT_PIN` constant at the top of the file, or let the user change it from the in-app "Change Security Code" panel).
+The floating button is hidden on `/record-statement` and `/police-dashboard` via `useLocation()`.
 
 ---
 
-## 👥 Team
-
-| Name | Role |
-|---|---|
-| Nithyarajan N.C | Team Leader |
-| Hemalatha M | Member |
-| Barath G | Member |
-| Bhagesri Ranjna V | Member |
-
-**Keywords:** Multilingual FIR · Groq AI Extraction · Bharatiya Nyaya Sanhita Classification · AI Suspect Sketch · GPS Crime Mapping · Dual Citizen/Police Portal · Supabase · Offline-First| Reverse Geocoding | Nominatim API |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| State / Storage | localStorage (offline-first) |
-| Routing | React Router v6 |
-
----
-
-## 📁 Project Structure
+## 🎯 Demo Credentials
 
 ```
-src/
-├── pages/
-│   ├── Home.jsx              ← Landing page
-│   ├── Dashboard.jsx         ← Officer dashboard
-│   ├── RecordStatement.jsx   ← 7-step FIR filing
-│   ├── FIRHistory.jsx        ← All FIR records
-│   └── Analytics.jsx         ← Crime statistics
-├── components/
-│   ├── ui/                   ← Button, Input, Select, etc.
-│   └── kavalan/              ← VoiceRecorder, LocationCapture,
-│                                PhotoUpload, SuspectSketch,
-│                                DigitalSignature, FIRDocument
-├── hooks/
-│   └── useFIRStore.js        ← localStorage FIR state
-└── utils/
-    ├── index.js              ← cn(), formatDate(), generateFIRId()
-    └── ipcValidator.js       ← IPC section validation (20+ sections)
+Police Login — Station Code: TN-CHN-001  |  Password: police123
+Police Login — Station Code: TN-MDU-001  |  Password: police123  (Madurai)
+Police Login — Station Code: TN-VLR-002  |  Password: police123  (Katpadi)
 ```
 
 ---
 
-## 🔌 Connecting Real AI APIs
-
-To use real Whisper / GPT-4o-mini / DALL-E 3, create a backend server and set these endpoints:
-
-| Endpoint | Input | Output |
-|---|---|---|
-| `POST /api/transcribe` | `{ audio: File, language: string }` | `{ text, confidence, language }` |
-| `POST /api/extract` | `{ text: string }` | `{ crimeType, ipcSections, suspects }` |
-| `POST /api/sketch` | `{ prompt: string }` | `{ imageUrl: string }` |
-
----
-
-## 👥 Team
-
-| Name | Role |
-|---|---|
-| Nithyarajan N.C | Team Leader |
-| Hemalatha M | Member |
-| Barath G | Member |
-| Bhagesri Ranjna V | Member |
-
-**Keywords:** Multilingual FIR, AI Suspect Sketch, NLP Legal Docs, GPS Tagging, Police API
+**Keywords:** Multilingual FIR · Groq AI Extraction · BNS 2023 · AI Suspect Sketch · GPS Crime Mapping · Dual Portal · Supabase · Offline-First · Fast2SMS · Emergency SOS

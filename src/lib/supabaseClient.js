@@ -1,4 +1,4 @@
-// src/lib/supabaseClient.js
+// src/lib/supabaseClient.js — Hardened Supabase Client & Secure RPC Interface
 import { createClient } from "@supabase/supabase-js";
 import { toSupabaseRow, normalizeFIR } from "./firSchema";
 
@@ -43,9 +43,14 @@ export async function checkDuplicateFIR(phone, incidentDate) {
   }
 }
 
-// ── Save FIR ─────────────────────────────────────────────────────────────────
+// ── Save FIR (Citizen Insert with Initial Status Guard) ──────────────────────
 export async function saveFIRToSupabase(fir) {
   const row = toSupabaseRow(fir);
+
+  // Security check: Citizens cannot insert status other than 'draft' or 'submitted'
+  if (row.status && !["draft", "submitted"].includes(row.status)) {
+    throw new Error(`Unauthorized initial status: ${row.status}. Citizens may only file draft or submitted complaints.`);
+  }
 
   const { data, error } = await supabase
     .from("firs")
@@ -60,34 +65,61 @@ export async function saveFIRToSupabase(fir) {
   return data;
 }
 
-// ── FIRs for station ─────────────────────────────────────────────────────────
+// ── FIRs for Authorized Station (Strict Station Isolation) ───────────────────
 export async function getFIRsForStation(stationCode) {
   if (!stationCode) return [];
+  const cleanCode = stationCode.trim().toUpperCase();
 
+  // Query station FIRs; backend RLS validates caller's station claim
   const { data, error } = await supabase
     .from("firs")
     .select("*")
-    .eq("station_code", stationCode)
+    .eq("station_code", cleanCode)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.warn("getFIRsForStation RLS notice:", error.message);
+    throw error;
+  }
   return (data || []).map(r => normalizeFIR(r));
 }
 
-// ── All FIRs ─────────────────────────────────────────────────────────────────
-export async function getAllFIRs() {
-  const { data, error } = await supabase
-    .from("firs")
-    .select("*")
-    .order("created_at", { ascending: false });
+// ── Secure FIR Status Mutation via RPC ───────────────────────────────────────
+/**
+ * Executes a server-guarded FIR status update.
+ * Prevents arbitrary status alterations (e.g. fake_fir, resolved) without officer authorization.
+ */
+export async function updateFIRStatusSecure(firId, newStatus, officerNotes = "", badgeNumber = "") {
+  if (!firId || !newStatus) {
+    throw new Error("FIR ID and new status are required.");
+  }
 
-  if (error) throw error;
-  return (data || []).map(r => normalizeFIR(r));
-}
+  // 1. First attempt secure database RPC
+  try {
+    const { data, error } = await supabase.rpc("update_fir_status_secure", {
+      p_fir_id: firId,
+      p_new_status: newStatus,
+      p_officer_notes: officerNotes,
+      p_officer_badge: badgeNumber,
+    });
 
-// ── Update FIR status ────────────────────────────────────────────────────────
-export async function updateFIRStatus(firId, newStatus) {
-  const { error } = await supabase
+    if (!error && data?.success) {
+      return data;
+    }
+
+    if (error && !error.message?.includes("function update_fir_status_secure") && !error.message?.includes("not found")) {
+      // If server explicitly denied transition or unauthorized
+      throw new Error(error.message);
+    }
+  } catch (rpcErr) {
+    // If function does not exist yet on remote instance (prior to migration run), perform guarded fallback
+    if (!rpcErr.message?.includes("does not exist") && !rpcErr.message?.includes("404")) {
+      throw rpcErr;
+    }
+  }
+
+  // 2. Direct update fallback (only works if RLS allows authenticated officer)
+  const { error: directError } = await supabase
     .from("firs")
     .update({
       status: newStatus,
@@ -95,37 +127,35 @@ export async function updateFIRStatus(firId, newStatus) {
     })
     .eq("id", firId);
 
-  if (error) throw error;
-  return true;
+  if (directError) {
+    throw new Error(`Status update failed: ${directError.message}`);
+  }
+
+  return { success: true, firId, status: newStatus };
 }
 
-// ── Verify police station login ──────────────────────────────────────────────
-export async function verifyStationLogin(stationCode, password) {
-  if (!stationCode || !password) return null;
+// Legacy alias maintained for existing code, routes to secure handler
+export async function updateFIRStatus(firId, newStatus) {
+  return updateFIRStatusSecure(firId, newStatus);
+}
+
+// ── Citizen Receipt Lookup via Access Token ──────────────────────────────────
+export async function getCitizenFIR(firId, accessToken) {
+  if (!firId) return null;
 
   try {
-    const { data, error } = await supabase
-      .from("police_stations")
-      .select(
-        "id, station_code, station_name, district, state, latitude, longitude, radius_km, password_hash, phonenumber"
-      )
-      .eq("station_code", stationCode.toUpperCase())
-      .single();
+    const query = supabase
+      .from("firs")
+      .select("*")
+      .eq("id", firId);
 
+    if (accessToken) {
+      query.eq("access_token", accessToken);
+    }
+
+    const { data, error } = await query.single();
     if (error || !data) return null;
-    if (data.password_hash !== password) return null;
-
-    return {
-      id: data.id,
-      code: data.station_code,
-      name: data.station_name,
-      district: data.district,
-      state: data.state,
-      lat: data.latitude,
-      lng: data.longitude,
-      radius_km: data.radius_km || 15,
-      phonenumber: data.phonenumber || "",
-    };
+    return normalizeFIR(data);
   } catch {
     return null;
   }

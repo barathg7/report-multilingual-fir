@@ -7,7 +7,8 @@ import {
   BarChart2, CheckCircle, ExternalLink, Camera, User, X,
   Phone, Calendar, Clock, Eye, AlertOctagon, Scale, ShieldCheck
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, updateFIRStatusSecure, getFIRsForStation } from "@/lib/supabaseClient";
+import { getAuthenticatedStation, clearPoliceSession } from "@/lib/policeAuth";
 import { generateAndDownloadFIRDocx } from "@/lib/firDocxGenerator";
 import { normalizeFIR, calculateCompleteness, toSupabaseRow } from "@/lib/firSchema";
 import { loadFromStorage, saveToStorage } from "@/utils";
@@ -506,17 +507,21 @@ export default function PoliceDashboard() {
   const [fakeConfirming,setFakeConfirming]= useState(false);
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("police_station");
-    if (!raw) {
-      navigate("/police-login");
-      return;
+    let active = true;
+    async function loadStationAuth() {
+      const s = await getAuthenticatedStation();
+      if (!s) {
+        navigate("/police-login");
+        return;
+      }
+      if (active) {
+        setStation(s);
+        fetchStationFIRs(s);
+      }
     }
-    const s = JSON.parse(raw);
-    setStation(s);
-    fetchStationFIRs(s);
+    loadStationAuth();
 
     // Real-time Supabase subscriptions
-    const stationCode = s.code || s.station_code;
     const channel = supabase
       .channel("police-firs-realtime")
       .on("postgres_changes", {
@@ -524,72 +529,48 @@ export default function PoliceDashboard() {
         schema: "public",
         table: "firs",
       }, () => {
-        fetchStationFIRs(s);
+        getAuthenticatedStation().then(s => {
+          if (s && active) fetchStationFIRs(s);
+        });
       })
       .subscribe();
 
     return () => {
+      active = false;
       supabase.removeChannel(channel);
     };
   }, [navigate]);
 
-  // Unified FIR fetch: pulls from Supabase and merges with local store for resilience
+  // Unified FIR fetch: pulls station-scoped records from Supabase and local store
   const fetchStationFIRs = async (s) => {
     setLoading(true);
     try {
-      const stationCode = (s.code || s.station_code || "").trim();
-      const stationName = (s.name || "").trim().toLowerCase();
+      const stationCode = (s.code || s.station_code || "").trim().toUpperCase();
 
-      // 1. Fetch remote Supabase FIRs
+      // 1. Fetch remote Supabase FIRs isolated to this station jurisdiction
       let remoteFIRs = [];
       try {
-        const { data, error } = await supabase
-          .from("firs")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (!error && data) {
-          remoteFIRs = data;
-        }
+        remoteFIRs = await getFIRsForStation(stationCode);
       } catch (e) {
         console.warn("Remote FIR query unavailable, using local store:", e.message);
       }
 
-      // 2. Fetch local storage FIRs (queued or filed offline/dev)
+      // 2. Fetch local storage FIRs matching this station
       const localStored = loadFromStorage("report_firs", []);
-      const normalizedLocal = Array.isArray(localStored) ? localStored.map(toSupabaseRow) : [];
+      const stationLocal = Array.isArray(localStored)
+        ? localStored
+            .map(toSupabaseRow)
+            .filter(f => (f.station_code || "").trim().toUpperCase() === stationCode)
+        : [];
 
       // Combine both sources, deduplicating by ID
       const map = new Map();
       remoteFIRs.forEach(f => map.set(f.id, f));
-      normalizedLocal.forEach(f => {
+      stationLocal.forEach(f => {
         if (!map.has(f.id)) map.set(f.id, f);
       });
 
-      const allFIRs = Array.from(map.values());
-
-      // Filter by station jurisdiction
-      const filtered = allFIRs.filter(fir => {
-        const code = (fir.station_code || "").trim();
-        const name = (fir.station_name || "").trim().toLowerCase();
-        
-        // Exact station code match
-        if (stationCode && code && code.toLowerCase() === stationCode.toLowerCase()) return true;
-        // Station name match
-        if (stationName && name && name.includes(stationName)) return true;
-        // If unassigned, check GPS proximity
-        if (!code && !name && fir.incident_latitude && fir.incident_longitude) {
-          const stLat = s.lat || s.latitude;
-          const stLng = s.lng || s.longitude;
-          if (stLat && stLng) {
-            const dist = haversineKm(stLat, stLng, fir.incident_latitude, fir.incident_longitude);
-            return dist !== null && dist <= 25; // within 25km
-          }
-        }
-        // In local development, if only a few FIRs exist, show them so station officer can test
-        return allFIRs.length <= 5;
-      });
-
-      setFirs(filtered);
+      setFirs(Array.from(map.values()));
     } catch (err) {
       console.error("FIR fetch error:", err);
     } finally {
@@ -605,11 +586,13 @@ export default function PoliceDashboard() {
     }
 
     try {
-      // Update Supabase
-      await supabase
-        .from("firs")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", firId);
+      // Execute secure status transition
+      await updateFIRStatusSecure(
+        firId,
+        newStatus,
+        "Status updated by investigating officer",
+        station?.officerBadge || "OFFICER"
+      );
 
       // Also update local store
       const local = loadFromStorage("report_firs", []);
@@ -630,10 +613,12 @@ export default function PoliceDashboard() {
     if (!fakeFIRTarget) return;
     setFakeConfirming(true);
     try {
-      await supabase
-        .from("firs")
-        .update({ status: "fake_fir", updated_at: new Date().toISOString() })
-        .eq("id", fakeFIRTarget.id);
+      await updateFIRStatusSecure(
+        fakeFIRTarget.id,
+        "fake_fir",
+        "Statutory prosecution initiated under BNSS for malicious/fabricated complaint.",
+        station?.officerBadge || "OFFICER"
+      );
 
       const local = loadFromStorage("report_firs", []);
       const updated = local.map(f => f.id === fakeFIRTarget.id ? { ...f, status: "fake_fir" } : f);
@@ -746,9 +731,9 @@ export default function PoliceDashboard() {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
           <button
-            onClick={() => {
-              sessionStorage.removeItem("police_station");
-              navigate("/");
+            onClick={async () => {
+              await clearPoliceSession();
+              navigate("/police-login");
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold transition border border-rose-900/50"
           >

@@ -1,15 +1,14 @@
-// src/pages/PoliceLogin.jsx
-// ✅ Demo station codes REMOVED (security fix)
-// ✅ Station name auto-lookup as officer types code
+// src/pages/PoliceLogin.jsx — Hardened Official Station Police Authentication Portal
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, Lock, Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react";
-import { verifyStationLogin } from "@/lib/supabaseClient";
-import { verifyStation, getStationByCode } from "@/utils/policeStations";
+import { Shield, Lock, Eye, EyeOff, Loader2, AlertCircle, CheckCircle, BadgeCheck } from "lucide-react";
+import { authenticatePolice } from "@/lib/policeAuth";
+import { getStationByCode } from "@/utils/policeStations";
 
 export default function PoliceLogin() {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
+  const [badge, setBadge] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,7 +32,7 @@ export default function PoliceLogin() {
     e.preventDefault();
 
     if (!code || !password) {
-      setError("Enter station code and password");
+      setError("Please provide station code and officer credentials.");
       return;
     }
 
@@ -41,76 +40,67 @@ export default function PoliceLogin() {
     setError("");
 
     try {
-      let station = null;
-
-      try {
-        station = await verifyStationLogin(code, password);
-      } catch (_) {}
-
-      if (!station) station = verifyStation(code, password);
-
-      if (!station) {
-        setError("Invalid credentials. Contact your SHO.");
-        return;
-      }
-
-      const safeStation = {
-        id: station.id,
-        code: station.code || station.station_code,
-        name: station.name || station.station_name,
-        district: station.district,
-        state: station.state,
-        lat: station.lat || station.latitude,
-        lng: station.lng || station.longitude,
-        radius_km: station.radius_km || 15,
-        phonenumber: station.phonenumber || station.phone || "",
-      };
-
-      sessionStorage.setItem("police_station", JSON.stringify(safeStation));
+      await authenticatePolice(code, password, badge || "SHO-DUTY");
       navigate("/police-dashboard");
     } catch (err) {
-      setError("Login failed. Please try again.");
+      setError(err.message || "Authentication failed. Contact your jurisdictional nodal officer.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-slate-950 flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 rounded-2xl mb-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 rounded-2xl mb-4 border border-white/20 shadow-xl backdrop-blur-sm">
             <Shield className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-white text-2xl font-bold">Police Portal</h1>
-          <p className="text-blue-200 text-sm mt-1">Sign in with your station credentials</p>
+          <h1 className="text-white text-2xl font-bold tracking-tight">Police Portal</h1>
+          <p className="text-blue-200 text-xs mt-1">Authorized Station & Investigating Officer Access</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 space-y-4 border border-slate-200">
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Station Code
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                Station Jurisdiction Code
               </label>
               <input
                 type="text"
                 value={code}
                 onChange={(e) => handleCodeChange(e.target.value)}
-                placeholder="E.G. TN-VLR-002"
+                placeholder="E.G. TN-CHN-001"
                 autoComplete="username"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-600 uppercase transition"
               />
               {stationName && (
                 <div className="flex items-center gap-1.5 mt-1.5">
-                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                  <p className="text-xs text-green-600 font-medium">{stationName}</p>
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                  <p className="text-xs text-emerald-700 font-semibold">{stationName}</p>
                 </div>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Password
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                Officer Badge / Service ID
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={badge}
+                  onChange={(e) => setBadge(e.target.value.toUpperCase())}
+                  placeholder="E.G. SHO-4102"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 uppercase transition"
+                />
+                <BadgeCheck className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                Station Secure Password
               </label>
               <div className="relative">
                 <input
@@ -120,14 +110,14 @@ export default function PoliceLogin() {
                     setPassword(e.target.value);
                     setError("");
                   }}
-                  placeholder="Enter station password"
+                  placeholder="Enter encrypted password"
                   autoComplete="current-password"
-                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 pr-12 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
                 >
                   {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -135,34 +125,34 @@ export default function PoliceLogin() {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-                <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-700">{error}</p>
+              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5">
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-rose-700 leading-snug">{error}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
             >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in…
+                  Verifying Credentials…
                 </>
               ) : (
                 <>
                   <Lock className="h-4 w-4" />
-                  Sign In
+                  Sign In to Station Console
                 </>
               )}
             </button>
           </form>
 
           <div className="border-t border-gray-100 pt-3">
-            <p className="text-xs text-gray-400 text-center">
-              Official use only · Unauthorized access is a criminal offence under IT Act 2000
+            <p className="text-[11px] text-gray-500 text-center leading-relaxed">
+              Official Police Use Only. Plaintext default credentials have been disabled. Station authorization is governed under IT Act 2000 and BNSS 2023.
             </p>
           </div>
         </div>

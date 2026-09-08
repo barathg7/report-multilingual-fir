@@ -6,7 +6,8 @@ import {
   ArrowLeft, RefreshCw, Clock, CheckCircle, AlertTriangle,
   Scale, Shield
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { getFIRsForStation } from "@/lib/supabaseClient";
+import { getAuthenticatedStation } from "@/lib/policeAuth";
 import { loadFromStorage } from "@/utils";
 import { toSupabaseRow } from "@/lib/firSchema";
 
@@ -17,59 +18,47 @@ export default function Analytics() {
   const [station, setStation] = useState(null);
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("police_station");
-    if (!raw) {
-      navigate("/police-login");
-      return;
+    async function loadAuth() {
+      const s = await getAuthenticatedStation();
+      if (!s) {
+        navigate("/police-login");
+        return;
+      }
+      setStation(s);
+      fetchStationFIRs(s);
     }
-    const s = JSON.parse(raw);
-    setStation(s);
-    fetchStationFIRs(s);
+    loadAuth();
   }, [navigate]);
 
   const fetchStationFIRs = async (s) => {
     setLoading(true);
     try {
-      const stationCode = (s.code || s.station_code || "").trim();
-      const stationName = (s.name || "").trim().toLowerCase();
+      const stationCode = (s.code || s.station_code || "").trim().toUpperCase();
 
-      // 1. Fetch from Supabase
+      // 1. Fetch remote FIRs isolated to station
       let remoteFIRs = [];
       try {
-        const { data, error } = await supabase
-          .from("firs")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (!error && data) {
-          remoteFIRs = data;
-        }
+        remoteFIRs = await getFIRsForStation(stationCode);
       } catch (e) {
         console.warn("Analytics remote query error:", e.message);
       }
 
-      // 2. Fetch from Local Store
+      // 2. Fetch local store FIRs matching station
       const localStored = loadFromStorage("report_firs", []);
-      const normalizedLocal = Array.isArray(localStored) ? localStored.map(toSupabaseRow) : [];
+      const stationLocal = Array.isArray(localStored)
+        ? localStored
+            .map(toSupabaseRow)
+            .filter(f => (f.station_code || "").trim().toUpperCase() === stationCode)
+        : [];
 
       // Merge and deduplicate
       const map = new Map();
       remoteFIRs.forEach(f => map.set(f.id, f));
-      normalizedLocal.forEach(f => {
+      stationLocal.forEach(f => {
         if (!map.has(f.id)) map.set(f.id, f);
       });
 
-      const all = Array.from(map.values());
-
-      // Filter station-scoped
-      const filtered = all.filter(fir => {
-        const code = (fir.station_code || "").trim();
-        const name = (fir.station_name || "").trim().toLowerCase();
-        if (stationCode && code && code.toLowerCase() === stationCode.toLowerCase()) return true;
-        if (stationName && name && name.includes(stationName)) return true;
-        return all.length <= 5; // fallback in dev mode
-      });
-
-      setFirs(filtered);
+      setFirs(Array.from(map.values()));
     } catch (err) {
       console.error("Analytics fetch error:", err);
     } finally {

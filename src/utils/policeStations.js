@@ -3544,13 +3544,8 @@ export function getStationByCode(code) {
   return STATIONS.find(s => s.code === upper || s.id === upper) || null;
 }
 
-// ── Verify station login ──────────────────────────────────
-export function verifyStation(code, password) {
-  const station = getStationByCode(code);
-  if (!station) return null;
-  // If station has specific password, check it, else default auth check
-  const expectedPwd = station.password || "police123";
-  return password === expectedPwd ? station : null;
-}
+// ── Station lookup (authentication is handled by src/lib/policeAuth.js) ──
+// verifyStation() was removed — it contained a plaintext "police123" fallback.
+// All login validation must go through policeAuth.authenticateOfficer().
 
 export default STATIONS;

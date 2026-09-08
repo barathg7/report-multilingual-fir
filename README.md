@@ -222,13 +222,10 @@ The floating button is hidden on `/record-statement` and `/police-dashboard` via
 
 ---
 
-## 🎯 Demo Credentials
+## 🔐 Police Portal Access
 
-```
-Police Login — Station Code: TN-CHN-001  |  Password: police123
-Police Login — Station Code: TN-MDU-001  |  Password: police123  (Madurai)
-Police Login — Station Code: TN-VLR-002  |  Password: police123  (Katpadi)
-```
+Station login credentials are managed by your district's nodal officer and stored securely in the `police_officers` table via Supabase.  
+The default insecure password (`police123`) has been **disabled**. Contact your administrative nodal officer to obtain valid credentials.
 
 ---
 

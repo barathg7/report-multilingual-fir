@@ -244,8 +244,35 @@ const CRIME_TO_BNS = {
   "evidence tampering":  ["238"],
 };
 
-// ── suggestIPCSections (kept same name for backward compat) ───────────────────
-export function suggestIPCSections(text) {
+// ── Canonical Legal Suggestion Structure ─────────────────────────────────────
+export function createLegalSuggestion({
+  act = "BNS 2023",
+  section = "",
+  title = "",
+  explanation = "",
+  confidence = 0.85,
+  source = "AI",
+  verifiedByPolice = false,
+  verifiedByOfficerBadge = null,
+  verifiedAt = null,
+} = {}) {
+  const cleanSec = String(section).replace(/^§/, "").trim();
+  const info = BNS_SECTIONS[cleanSec];
+  return {
+    act: act || (cleanSec.startsWith("66") || cleanSec === "67" || cleanSec === "67A" ? "IT Act 2000" : "BNS 2023"),
+    section: cleanSec,
+    title: title || info?.title || `Section §${cleanSec}`,
+    explanation: explanation || (info ? `Preliminary suggestion under ${info.category} category` : "AI legal suggestion"),
+    confidence: typeof confidence === "number" ? confidence : 0.85,
+    source: source || "AI",
+    verifiedByPolice: Boolean(verifiedByPolice),
+    verifiedByOfficerBadge: verifiedByOfficerBadge || null,
+    verifiedAt: verifiedAt || null,
+  };
+}
+
+// ── suggestLegalSuggestions (Canonical BNS Suggestions) ─────────────────────
+export function suggestLegalSuggestions(text, options = {}) {
   if (!text) return [];
   const lower = text.toLowerCase();
   const matched = new Map();
@@ -254,34 +281,39 @@ export function suggestIPCSections(text) {
     if (lower.includes(keyword)) {
       for (const sec of sections) {
         if (!matched.has(sec) && BNS_SECTIONS[sec]) {
-          matched.set(sec, {
-            section:  sec,
-            title:    BNS_SECTIONS[sec].title,
-            category: BNS_SECTIONS[sec].category,
-            severity: BNS_SECTIONS[sec].severity,
-            act:      sec.startsWith("66") || sec === "67" || sec === "67A"
-                        ? "IT Act 2000"
-                        : "BNS 2023",
-          });
+          const act = sec.startsWith("66") || sec === "67" || sec === "67A"
+            ? "IT Act 2000"
+            : "BNS 2023";
+          matched.set(sec, createLegalSuggestion({
+            act,
+            section: sec,
+            title: BNS_SECTIONS[sec].title,
+            explanation: `Suggested for reported offence related to '${keyword}' (${BNS_SECTIONS[sec].category})`,
+            confidence: 0.85,
+            source: options.source || "AI",
+            verifiedByPolice: false,
+          }));
         }
       }
     }
   }
 
-  // Sort: high severity first, then medium, then low
-  const order = { high: 0, medium: 1, low: 2 };
-  return [...matched.values()].sort(
-    (a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3)
-  );
+  return Array.from(matched.values());
 }
 
-// ── validateIPCSections (kept same name for backward compat) ──────────────────
-export function validateIPCSections(sections) {
+// ── Backward-compatible suggestIPCSections ──────────────────────────────────
+export function suggestIPCSections(text) {
+  return suggestLegalSuggestions(text);
+}
+
+// ── validateLegalSections (Canonical) ───────────────────────────────────────
+export function validateLegalSections(sections) {
   if (!sections || !sections.length) {
-    return { isValid: false, summary: "No sections provided", details: [] };
+    return { isValid: false, summary: "No legal sections provided", details: [] };
   }
 
-  const details = sections.map((sec) => {
+  const details = sections.map((secInput) => {
+    const sec = typeof secInput === "object" ? secInput.section : String(secInput).replace(/^§/, "").trim();
     const info = BNS_SECTIONS[sec];
     return {
       section:  sec,
@@ -301,11 +333,16 @@ export function validateIPCSections(sections) {
   return {
     isValid:  allValid,
     summary:  allValid
-      ? `${validCount} BNS section(s) verified — ${hasHigh ? "serious offence" : "registered"}`
-      : `${validCount}/${sections.length} sections valid in BNS 2023`,
+      ? `${validCount} BNS section(s) verified in legal codex`
+      : `${validCount}/${sections.length} sections recognized in BNS 2023`,
     details,
     act:      "Bharatiya Nyaya Sanhita 2023",
   };
+}
+
+// ── validateIPCSections (Backward Compatibility Alias) ───────────────────────
+export function validateIPCSections(sections) {
+  return validateLegalSections(sections);
 }
 
 // ── Helper: convert old IPC number to BNS ────────────────────────────────────

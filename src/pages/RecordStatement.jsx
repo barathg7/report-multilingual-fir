@@ -154,12 +154,25 @@ export default function RecordStatement() {
     catch { return ""; }
   })();
 
-  const upd = useCallback((field, value) => {
+  const [provenance, setProvenance] = useState({});
+  const provenanceRef = useRef({});
+
+  const upd = useCallback((field, value, source = "USER") => {
     setForm(prev => ({ ...prev, [field]: value }));
-  }, []);
+    const meta = {
+      source,
+      confidence: source === "USER" ? 1.0 : 0.85,
+      editedByUser: source === "USER",
+      verified: field === "complainantPhone" && (Boolean(citizenEmail) || provenanceRef.current[field]?.verified),
+      lastUpdated: new Date().toISOString(),
+    };
+    provenanceRef.current[field] = meta;
+    setProvenance(prev => ({ ...prev, [field]: meta }));
+  }, [citizenEmail]);
 
   const addIPC = (s) => {
-    const sec = [...new Set([...form.ipcSections, s.trim()])];
+    const clean = s.trim().replace(/^§/, "");
+    const sec = [...new Set([...form.ipcSections, clean])];
     upd("ipcSections", sec);
     setIpcValidation(validateIPCSections(sec));
     setIpcInput("");
@@ -180,64 +193,112 @@ export default function RecordStatement() {
     }
   };
 
-  // ── KEY FIX: handleVoiceComplete ─────────────────────────────────
-  // The extracted data arrives here synchronously from VoiceRecorder.
-  // We store it in a ref immediately, then apply to form in one atomic setState.
-  const handleVoiceComplete = useCallback(({ text, extracted }) => {
-    // 1. Capture in ref immediately (bypasses React batching)
+  // ── KEY FIX: handleVoiceComplete with User Edit Protection ────────────────
+  const handleVoiceComplete = useCallback(({ text, rawText, extracted }) => {
     if (extracted && Object.keys(extracted).length > 0) {
       extractedRef.current = extracted;
     }
 
-    // 2. Update transcript text
-    setTranscript(text || "");
+    setTranscript(text || rawText || "");
 
-    // 3. Apply ALL extracted fields atomically in a single setState
     setForm(prev => {
       const e = extractedRef.current || {};
+      const next = { ...prev };
+      const prov = { ...provenanceRef.current };
 
-      // Helper: use extracted value only if it's a non-empty string
-      const pick = (extracted, fallback) =>
-        extracted && String(extracted).trim() ? String(extracted).trim() : fallback;
-
-      return {
-        ...prev,
-        // Complainant
-        complainantName:         pick(e.complainantName,         prev.complainantName),
-        complainantPhone:        pick(e.complainantPhone,        prev.complainantPhone),
-        complainantAge:          pick(e.complainantAge,          prev.complainantAge),
-        complainantGender:       pick(e.complainantGender,       prev.complainantGender),
-        complainantAddress:      pick(e.complainantAddress,      prev.complainantAddress),
-        // Incident — date/time already in HTML format (YYYY-MM-DD / HH:MM)
-        // because VoiceRecorder.normalizeExtracted() converted them
-        incidentDate:            pick(e.incidentDate,            prev.incidentDate),
-        incidentTime:            pick(e.incidentTime,            prev.incidentTime),
-        incidentLocation:        pick(e.incidentLocation,        prev.incidentLocation),
-        crimeType:               pick(e.crimeType,               prev.crimeType),
-        incidentDescription:     text && text.trim() ? text.trim() : prev.incidentDescription,
-        suspectDescription:      pick(e.suspectDescription,      prev.suspectDescription),
-        stolenItems:             pick(e.stolenItems,             prev.stolenItems),
-        weaponUsed:              pick(e.weaponUsed,              prev.weaponUsed),
-        vehicleNumber:           pick(e.vehicleNumber,           prev.vehicleNumber),
-        witnessNames:            pick(e.witnessNames,            prev.witnessNames),
-        // Location
-        locationLandmarks:       pick(e.locationLandmarks,       prev.locationLandmarks),
-        nearestLandmark:         pick(e.nearestLandmark,         prev.nearestLandmark),
-        locationArea:            pick(e.locationArea,            prev.locationArea),
-        locationCity:            pick(e.locationCity,            prev.locationCity),
-        locationState:           pick(e.locationState,           prev.locationState),
-        locationSearchQuery:     pick(e.locationSearchQuery,     prev.locationSearchQuery),
-        fullLocationDescription: pick(e.fullLocationDescription, prev.fullLocationDescription),
-        // IPC sections — only replace if we got new ones
-        ipcSections: (e.ipcSections?.length > 0) ? e.ipcSections : prev.ipcSections,
+      const safeMerge = (field, extractedVal, currentVal) => {
+        // Rule 1: User-edited value cannot be overwritten by later AI extraction
+        if (prov[field]?.editedByUser) {
+          return currentVal;
+        }
+        // Rule 2: OTP-verified phone cannot be overwritten by voice extraction
+        if (field === "complainantPhone" && (prov[field]?.verified || Boolean(citizenEmail))) {
+          return currentVal;
+        }
+        // If extracted value is present
+        if (extractedVal && String(extractedVal).trim()) {
+          const meta = {
+            source: "AI",
+            confidence: e.confidence || 0.85,
+            editedByUser: false,
+            verified: false,
+            lastUpdated: new Date().toISOString(),
+          };
+          prov[field] = meta;
+          provenanceRef.current[field] = meta;
+          return String(extractedVal).trim();
+        }
+        return currentVal;
       };
+
+      next.complainantName         = safeMerge("complainantName",         e.complainantName,         prev.complainantName);
+      next.complainantPhone        = safeMerge("complainantPhone",        e.complainantPhone,        prev.complainantPhone);
+      next.complainantAge          = safeMerge("complainantAge",          e.complainantAge,          prev.complainantAge);
+      next.complainantGender       = safeMerge("complainantGender",       e.complainantGender,       prev.complainantGender);
+      next.complainantAddress      = safeMerge("complainantAddress",      e.complainantAddress,      prev.complainantAddress);
+
+      next.incidentDate            = safeMerge("incidentDate",            e.incidentDate,            prev.incidentDate);
+      next.incidentTime            = safeMerge("incidentTime",            e.incidentTime,            prev.incidentTime);
+      next.incidentLocation        = safeMerge("incidentLocation",        e.incidentLocation,        prev.incidentLocation);
+      next.crimeType               = safeMerge("crimeType",               e.crimeType,               prev.crimeType);
+
+      if (text && text.trim() && !prov.incidentDescription?.editedByUser) {
+        next.incidentDescription = text.trim();
+        const descMeta = {
+          source: "AI",
+          confidence: 0.9,
+          editedByUser: false,
+          verified: false,
+          lastUpdated: new Date().toISOString(),
+        };
+        prov.incidentDescription = descMeta;
+        provenanceRef.current.incidentDescription = descMeta;
+      }
+
+      next.suspectDescription      = safeMerge("suspectDescription",      e.suspectDescription,      prev.suspectDescription);
+      next.stolenItems             = safeMerge("stolenItems",             e.stolenItems,             prev.stolenItems);
+      next.weaponUsed              = safeMerge("weaponUsed",              e.weaponUsed,              prev.weaponUsed);
+      next.vehicleNumber           = safeMerge("vehicleNumber",           e.vehicleNumber,           prev.vehicleNumber);
+      next.witnessNames            = safeMerge("witnessNames",            e.witnessNames,            prev.witnessNames);
+
+      next.locationLandmarks       = safeMerge("locationLandmarks",       e.locationLandmarks,       prev.locationLandmarks);
+      next.nearestLandmark         = safeMerge("nearestLandmark",         e.nearestLandmark,         prev.nearestLandmark);
+      next.locationArea            = safeMerge("locationArea",            e.locationArea,            prev.locationArea);
+      next.locationCity            = safeMerge("locationCity",            e.locationCity,            prev.locationCity);
+      next.locationState           = safeMerge("locationState",           e.locationState,           prev.locationState);
+      next.locationSearchQuery     = safeMerge("locationSearchQuery",     e.locationSearchQuery,     prev.locationSearchQuery);
+      next.fullLocationDescription = safeMerge("fullLocationDescription", e.fullLocationDescription, prev.fullLocationDescription);
+
+      // Rule 5: AI legal sections are suggestions only
+      const incomingSections = e.ipcSections || e.legalSuggestions;
+      if (incomingSections && incomingSections.length > 0) {
+        const canonicalSuggestions = incomingSections.map(sec => {
+          if (typeof sec === "object" && sec.section) return sec;
+          const clean = String(sec).replace(/^§/, "").trim();
+          return {
+            act: "BNS 2023",
+            section: clean,
+            title: `BNS §${clean}`,
+            explanation: "AI suggestion based on speech extraction",
+            confidence: 0.85,
+            source: "AI",
+            verifiedByPolice: false,
+            verifiedByOfficerBadge: null,
+            verifiedAt: null,
+          };
+        });
+        next.legalSuggestions = canonicalSuggestions;
+        next.ipcSections = canonicalSuggestions.map(s => s.section);
+      }
+
+      setProvenance(prov);
+      return next;
     });
 
-    // 4. Update IPC validation
     if (extracted?.ipcSections?.length) {
       setIpcValidation(validateIPCSections(extracted.ipcSections));
     }
-  }, []); // No dependencies — uses ref for extracted, setters are stable
+  }, [citizenEmail]);
 
   const canProceed = () => {
     if (step === 0) return !!lang;

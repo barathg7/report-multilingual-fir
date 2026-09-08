@@ -38,13 +38,14 @@ export const STATUS_COLORS = {
   fake_fir: "bg-rose-50 text-rose-700 border-rose-200",
 };
 
+import { generateSubmissionId, generateDraftId, generateOfficialFIRNumber } from "@/utils";
+
 /**
- * Generate official FIR Reference ID: TN001/YYYY/XXXX
+ * Generate official FIR Reference ID dynamically using state and station code.
+ * Outside Tamil Nadu, this will NEVER default to TN001.
  */
-export function generateCanonicalFIRId(statePrefix = "TN001") {
-  const year = new Date().getFullYear();
-  const randSeq = String(Math.floor(1000 + Math.random() * 9000));
-  return `${statePrefix}/${year}/${randSeq}`;
+export function generateCanonicalFIRId(opts = {}) {
+  return generateSubmissionId(opts);
 }
 
 /**
@@ -53,7 +54,11 @@ export function generateCanonicalFIRId(statePrefix = "TN001") {
 export function createDefaultFIR() {
   const now = new Date().toISOString();
   return {
-    id: generateCanonicalFIRId(),
+    id: generateDraftId(),
+    draftId: generateDraftId(),
+    submissionId: null,
+    officialFIRNo: null,
+    accessToken: null,
     status: FIR_STATUSES.DRAFT,
     complainant: {
       name: "",
@@ -96,7 +101,9 @@ export function createDefaultFIR() {
       vehicleNumber: "",
       sketchUrl: "",
     },
+    provenance: {}, // fieldName -> { source: 'USER'|'AI'|'GPS'|'SYSTEM'|'POLICE', confidence, editedByUser, verified, lastUpdated }
     legal: {
+      legalSuggestions: [], // Canonical array of: { act, section, title, explanation, confidence, source, verifiedByPolice, verifiedByOfficerBadge, verifiedAt }
       suggestedSections: [], // BNS 2023 section codes
       ipcSections: [], // Legacy IPC equivalent sections for cross-reference
       verifiedSections: [],
@@ -191,17 +198,53 @@ export function normalizeFIR(raw = {}) {
     sketchUrl: (raw.evidence?.sketchUrl ?? raw.suspect_sketch_url ?? raw.suspectSketchUrl ?? raw.sketch?.url ?? "").trim(),
   };
 
+  const rawSuggestions = raw.legal?.legalSuggestions ?? raw.legal_suggestions ?? [];
   const rawSections = raw.legal?.suggestedSections ?? raw.bns_sections ?? raw.bnsSections ?? raw.ipc_sections ?? raw.ipcSections ?? [];
-  const sections = Array.isArray(rawSections)
-    ? [...new Set(rawSections.map(s => String(s).replace(/^§/, "").trim()).filter(Boolean))]
-    : [];
+
+  let canonicalSuggestions = [];
+  if (Array.isArray(rawSuggestions) && rawSuggestions.length > 0) {
+    canonicalSuggestions = rawSuggestions.map(s => {
+      if (typeof s === "object" && s.section) {
+        return {
+          act: s.act || "BNS 2023",
+          section: String(s.section).replace(/^§/, "").trim(),
+          title: s.title || "",
+          explanation: s.explanation || "",
+          confidence: typeof s.confidence === "number" ? s.confidence : 0.85,
+          source: s.source || "AI",
+          verifiedByPolice: Boolean(s.verifiedByPolice),
+          verifiedByOfficerBadge: s.verifiedByOfficerBadge || null,
+          verifiedAt: s.verifiedAt || null,
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  } else if (Array.isArray(rawSections) && rawSections.length > 0) {
+    canonicalSuggestions = rawSections.map(sec => {
+      const clean = String(sec).replace(/^§/, "").trim();
+      return {
+        act: "BNS 2023",
+        section: clean,
+        title: `BNS §${clean}`,
+        explanation: "AI suggestion based on reported statement",
+        confidence: 0.85,
+        source: "AI",
+        verifiedByPolice: false,
+        verifiedByOfficerBadge: null,
+        verifiedAt: null,
+      };
+    });
+  }
+
+  const sections = canonicalSuggestions.map(s => s.section);
 
   const legal = {
+    legalSuggestions: canonicalSuggestions,
     suggestedSections: sections,
-    ipcSections: Array.isArray(raw.legal?.ipcSections ?? raw.ipc_sections ?? raw.ipcSections)
-      ? (raw.legal?.ipcSections ?? raw.ipc_sections ?? raw.ipcSections).map(s => String(s).trim())
-      : sections,
-    verifiedSections: Array.isArray(raw.legal?.verifiedSections) ? raw.legal.verifiedSections : [],
+    ipcSections: sections,
+    verifiedSections: Array.isArray(raw.legal?.verifiedSections ?? raw.verified_sections)
+      ? (raw.legal?.verifiedSections ?? raw.verified_sections)
+      : [],
     isVerifiedByPolice: Boolean(raw.legal?.isVerifiedByPolice ?? (raw.status === "verified")),
     legalCategory: raw.legal?.legalCategory ?? "",
   };
@@ -232,6 +275,11 @@ export function normalizeFIR(raw = {}) {
 
   const canonical = {
     id: raw.id || defaults.id,
+    draftId: raw.draftId || raw.draft_id || null,
+    submissionId: raw.submissionId || raw.submission_id || null,
+    officialFIRNo: raw.officialFIRNo || raw.official_fir_no || null,
+    accessToken: raw.accessToken || raw.access_token || null,
+    provenance: raw.provenance || {},
     status: Object.values(FIR_STATUSES).includes(raw.status) ? raw.status : FIR_STATUSES.SUBMITTED,
     complainant,
     incident,
@@ -380,6 +428,12 @@ export function toSupabaseRow(fir) {
     id: f.id,
     status: f.status,
 
+    draft_id: f.draftId || null,
+    submission_id: f.submissionId || null,
+    official_fir_no: f.officialFIRNo || null,
+    access_token: f.accessToken || null,
+    provenance: f.provenance || {},
+
     complainant_name: f.complainant.name || null,
     complainant_phone: f.complainant.phone || null,
     complainant_email: f.complainant.email || null,
@@ -392,7 +446,10 @@ export function toSupabaseRow(fir) {
     incident_location: f.location.address || f.location.city || null,
     incident_description: f.incident.description || null,
     crime_type: f.incident.crimeType || null,
-    ipc_sections: f.legal.suggestedSections,
+    legal_suggestions: f.legal.legalSuggestions || [],
+    verified_sections: f.legal.verifiedSections || [],
+    bns_sections: f.legal.suggestedSections || [],
+    ipc_sections: f.legal.suggestedSections || [],
 
     suspect_description: f.involved.suspects || null,
     stolen_items: f.evidence.stolenItems || null,

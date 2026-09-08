@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shield, Lock, Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { verifyStationLogin } from "@/lib/supabaseClient";
-import { verifyStation } from "@/utils/policeStations";
+import { verifyStation, getStationByCode } from "@/utils/policeStations";
 
 export default function PoliceLogin() {
   const navigate = useNavigate();
@@ -21,9 +21,9 @@ export default function PoliceLogin() {
     setCode(upper);
     setError("");
 
-    if (upper.length >= 8) {
-      const s = verifyStation(upper, "police123");
-      setStationName(s ? s.name : "");
+    if (upper.length >= 6) {
+      const s = getStationByCode(upper);
+      setStationName(s ? `${s.name} (${s.district})` : "");
     } else {
       setStationName("");
     }
@@ -54,7 +54,19 @@ export default function PoliceLogin() {
         return;
       }
 
-      sessionStorage.setItem("police_station", JSON.stringify(station));
+      const safeStation = {
+        id: station.id,
+        code: station.code || station.station_code,
+        name: station.name || station.station_name,
+        district: station.district,
+        state: station.state,
+        lat: station.lat || station.latitude,
+        lng: station.lng || station.longitude,
+        radius_km: station.radius_km || 15,
+        phonenumber: station.phonenumber || station.phone || "",
+      };
+
+      sessionStorage.setItem("police_station", JSON.stringify(safeStation));
       navigate("/police-dashboard");
     } catch (err) {
       setError("Login failed. Please try again.");

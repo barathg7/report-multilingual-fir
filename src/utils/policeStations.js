@@ -3537,11 +3537,20 @@ export function getAllStates() {
   return [...new Set(STATIONS.map(s => s.state))].sort();
 }
 
+// ── Get station by code ───────────────────────────────────
+export function getStationByCode(code) {
+  if (!code) return null;
+  const upper = code.toUpperCase().trim();
+  return STATIONS.find(s => s.code === upper || s.id === upper) || null;
+}
+
 // ── Verify station login ──────────────────────────────────
 export function verifyStation(code, password) {
-  return STATIONS.find(
-    s => s.code === code.toUpperCase() && s.password === password
-  ) || null;
+  const station = getStationByCode(code);
+  if (!station) return null;
+  // If station has specific password, check it, else default auth check
+  const expectedPwd = station.password || "police123";
+  return password === expectedPwd ? station : null;
 }
 
 export default STATIONS;

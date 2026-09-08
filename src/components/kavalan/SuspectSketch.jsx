@@ -542,7 +542,8 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
       const imgSrc = await generateWithHuggingFace(description);
       finishGeneration(imgSrc, "huggingface");
     } catch (e) {
-      setError(`Sketch generation failed on all providers: ${e.message}`);
+      console.warn("All sketch generation providers failed:", e.message);
+      setError("Sketch generation is unavailable right now. You can continue without it.");
       setStatus(""); setLoading(false);
     }
   };
@@ -722,12 +723,13 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
       )}
 
       {error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <div>
-            <p>{error}</p>
-            <button onClick={generate} className="text-xs text-blue-600 underline mt-1 flex items-center gap-1">
-              <RefreshCw className="h-3 w-3" /> Try Again
+        <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-medium text-xs">{error}</p>
+            <p className="text-[11px] text-amber-700">Suspect sketch is optional and will not affect FIR filing.</p>
+            <button type="button" onClick={generate} className="text-xs text-blue-600 underline font-medium flex items-center gap-1 mt-1">
+              <RefreshCw className="h-3 w-3" /> Retry Generation
             </button>
           </div>
         </div>

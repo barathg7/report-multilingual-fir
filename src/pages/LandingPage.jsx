@@ -1,128 +1,213 @@
 import { useNavigate } from "react-router-dom";
-import { Shield, Users, ArrowRight, CheckCircle, Lock } from "lucide-react";
+import {
+  Shield,
+  FileText,
+  Lock,
+  ArrowRight,
+  CheckCircle2,
+  Mic,
+  Globe2,
+  AlertOctagon,
+  Clock,
+  Building2,
+  UserCheck,
+} from "lucide-react";
+
+const HIGHLIGHT_LANGUAGES = [
+  { native: "தமிழ்", english: "Tamil" },
+  { native: "हिन्दी", english: "Hindi" },
+  { native: "English", english: "English" },
+  { native: "తెలుగు", english: "Telugu" },
+  { native: "ಕನ್ನಡ", english: "Kannada" },
+  { native: "മലയാളം", english: "Malayalam" },
+  { native: "मराठी", english: "Marathi" },
+  { native: "বাংলা", english: "Bengali" },
+  { native: "ગુજરાતી", english: "Gujarati" },
+  { native: "ਪੰਜਾਬੀ", english: "Punjabi" },
+];
 
 export default function LandingPage() {
   const navigate = useNavigate();
 
-  // Dispatch a custom event that App.jsx listens to, to open the SOS panel
-  function handleSOSClick() {
+  const handleSOSClick = () => {
     window.dispatchEvent(new CustomEvent("open-sos-panel"));
-  }
+  };
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-12"
-      style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #312e81 100%)" }}
-    >
-      {/* Logo / Title */}
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm mb-6 text-white backdrop-blur-sm">
-          <Shield className="h-4 w-4 text-blue-300" />
-          Tamil Nadu Police · REPORT System
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+      {/* ── TOP NAV BAR ── */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-sm">
+              <Shield className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <span className="font-extrabold text-lg text-slate-900 tracking-tight">REPORT</span>
+              <span className="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                v2.0 Public Service Prototype
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => navigate("/fir-history")}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              Track Complaint
+            </button>
+            <button
+              onClick={() => navigate("/police-login")}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              Police Portal
+            </button>
+          </div>
         </div>
-        <h1 className="text-6xl font-black text-white tracking-tight mb-2">REPORT</h1>
-        <p className="text-blue-200 text-lg font-semibold mb-1">
-          Real-time Evidence Processing for Official Record Transcription
+      </header>
+
+      {/* ── HERO SECTION ── */}
+      <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16 w-full flex flex-col items-center text-center">
+        
+        {/* Positioning Tag */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold mb-6">
+          <Globe2 className="w-4 h-4 text-blue-600" />
+          <span>Multilingual Digital Police Reporting Platform</span>
+        </div>
+
+        {/* Heading */}
+        <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight max-w-3xl leading-[1.15]">
+          Explain what happened in your own language. <br className="hidden sm:inline" />
+          <span className="text-blue-700">REPORT will help you structure it.</span>
+        </h1>
+
+        {/* Subtitle */}
+        <p className="mt-5 text-slate-600 text-sm sm:text-base max-w-2xl leading-relaxed">
+          A voice-first, AI-assisted platform that translates and structures citizen statements into official FIR records compliant with Bharatiya Nyaya Sanhita (BNS 2023). Every detail is reviewed and confirmed by you.
         </p>
-        <p className="text-blue-300 text-sm max-w-md mx-auto">
-          AI-powered multilingual FIR filing system — file complaints in your own language
-        </p>
-      </div>
 
-      {/* ── SOS button — sits ABOVE the two portal cards, no auto-open ── */}
-      <div className="w-full max-w-2xl mb-6">
-        <button
-          onClick={handleSOSClick}
-          className="w-full flex items-center justify-center gap-3 rounded-2xl py-3.5 px-6 font-bold text-white text-sm tracking-widest uppercase transition-all duration-200 hover:scale-[1.02] active:scale-95"
-          style={{
-            background: "linear-gradient(135deg, #7f1d1d, #991b1b)",
-            border: "1.5px solid rgba(220,38,38,0.55)",
-            boxShadow: "0 4px 24px rgba(220,38,38,0.3)",
-          }}
-        >
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: "#fca5a5",
-              animation: "sos-blink 0.9s ease-in-out infinite alternate",
-              flexShrink: 0,
-            }}
-          />
-          Emergency SOS — Send Live Location to Police
-        </button>
+        {/* ── PRIMARY ACTIONS ── */}
+        <div className="mt-8 flex flex-col sm:flex-row items-center gap-3.5 w-full sm:w-auto">
+          <button
+            onClick={() => navigate("/record-statement")}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-4 rounded-xl bg-blue-700 hover:bg-blue-800 active:scale-[0.98] text-white font-bold text-base shadow-lg shadow-blue-700/20 transition-all"
+          >
+            <Mic className="w-5 h-5 text-blue-200" />
+            <span>File a Complaint</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
 
-        {/* Tiny blink keyframe injected inline so it works without a CSS file */}
-        <style>{`
-          @keyframes sos-blink {
-            from { opacity: 0.4; box-shadow: 0 0 4px #f87171; }
-            to   { opacity: 1;   box-shadow: 0 0 10px #f87171; }
-          }
-        `}</style>
+          <button
+            onClick={() => navigate("/police-login")}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-semibold text-sm transition-all"
+          >
+            <Lock className="w-4 h-4 text-slate-500" />
+            <span>Official Police Login</span>
+          </button>
+        </div>
 
-        <p className="text-center text-red-300/70 text-xs mt-2">
-          Tap only in genuine emergencies · SMS sent to nearest Tamil Nadu Police station
-        </p>
-      </div>
-
-      {/* Two access cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-2xl">
-        {/* Citizen Card — ↓ ONLY CHANGE: /home → /citizen-login */}
-        <button
-          onClick={() => navigate("/citizen-login")}
-          className="group bg-white rounded-2xl p-8 text-left hover:shadow-2xl hover:scale-105 transition-all duration-200 shadow-lg"
-        >
-          <div className="bg-blue-100 rounded-xl p-3 w-fit mb-4">
-            <Users className="h-7 w-7 text-blue-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Citizen Portal</h2>
-          <p className="text-gray-500 text-sm leading-relaxed mb-5">
-            File an FIR complaint in your own language using voice recording. Available in 40+ languages.
-          </p>
-          <div className="space-y-1.5 mb-6">
-            {["Voice-based FIR filing", "AI auto-fills all details", "Multilingual support"].map(f => (
-              <div key={f} className="flex items-center gap-2 text-xs text-gray-600">
-                <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                {f}
+        {/* ── EMERGENCY SOS CARD ── */}
+        <div className="mt-8 w-full max-w-xl">
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <AlertOctagon className="w-5 h-5" />
               </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 text-blue-600 font-semibold text-sm group-hover:gap-3 transition-all">
-            File a Complaint <ArrowRight className="h-4 w-4" />
-          </div>
-        </button>
-
-        {/* Police Card — unchanged */}
-        <button
-          onClick={() => navigate("/police-login")}
-          className="group bg-white/10 border border-white/20 backdrop-blur-sm rounded-2xl p-8 text-left hover:bg-white/20 hover:scale-105 transition-all duration-200 shadow-lg"
-        >
-          <div className="bg-blue-900/50 rounded-xl p-3 w-fit mb-4 border border-white/10">
-            <Lock className="h-7 w-7 text-blue-200" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">Police Portal</h2>
-          <p className="text-blue-200 text-sm leading-relaxed mb-5">
-            Station officers can view and manage FIR complaints filed near their jurisdiction.
-          </p>
-          <div className="space-y-1.5 mb-6">
-            {["View nearby complaints", "Filter by crime type", "Update case status"].map(f => (
-              <div key={f} className="flex items-center gap-2 text-xs text-blue-200">
-                <CheckCircle className="h-3.5 w-3.5 text-blue-300 shrink-0" />
-                {f}
+              <div>
+                <p className="font-bold text-sm text-rose-950">Immediate Danger / Emergency?</p>
+                <p className="text-xs text-rose-700">Broadcast your live GPS coordinates directly to nearest stations.</p>
               </div>
-            ))}
+            </div>
+            <button
+              onClick={handleSOSClick}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs uppercase tracking-wider shrink-0 transition-colors shadow-sm"
+            >
+              Trigger SOS
+            </button>
           </div>
-          <div className="flex items-center gap-2 text-blue-200 font-semibold text-sm group-hover:gap-3 transition-all">
-            Police Login <ArrowRight className="h-4 w-4" />
-          </div>
-        </button>
-      </div>
+        </div>
 
-      {/* Team footer */}
-      <p className="text-blue-400 text-xs mt-10 text-center">
-        Team WhiteCoders · Adhiparashakthi College of Engineering · B.Tech AI&DS II Year
-      </p>
+        {/* ── SUPPORTED LANGUAGES PILLS ── */}
+        <div className="mt-12 w-full max-w-3xl pt-8 border-t border-slate-200">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">
+            Voice & Text Supported in 40+ Languages
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {HIGHLIGHT_LANGUAGES.map((l) => (
+              <span
+                key={l.english}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs font-medium shadow-2xs"
+              >
+                <span className="font-semibold text-blue-700">{l.native}</span>
+                <span className="text-slate-400">· {l.english}</span>
+              </span>
+            ))}
+            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">
+              + 30 more
+            </span>
+          </div>
+        </div>
+
+        {/* ── CORE SYSTEM PRINCIPLES (FOUR PILLARS) ── */}
+        <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full text-left">
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center">
+              <Mic className="w-5 h-5" />
+            </div>
+            <h2 className="font-bold text-sm text-slate-900">Voice-First Reporting</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Citizens can speak naturally in their dialect. Speech recognition captures and transcribes spoken evidence.
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <h2 className="font-bold text-sm text-slate-900">Human Verification</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              AI suggests incident fields and relevant BNS 2023 sections, but the complainant verifies and confirms every entry.
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <h2 className="font-bold text-sm text-slate-900">Station Jurisdiction</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              GPS mapping automatically determines jurisdiction across 3,500+ police stations nationwide.
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+            <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+              <FileText className="w-5 h-5" />
+            </div>
+            <h2 className="font-bold text-sm text-slate-900">Official State DOCX</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Downloads certified bilingual FIR documents in official state-specific templates ready for court submission.
+            </p>
+          </div>
+        </div>
+
+      </main>
+
+      {/* ── FOOTER ── */}
+      <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>REPORT — Real-time Evidence Processing for Official Record Transcription</p>
+          <div className="flex items-center gap-4">
+            <span>BNS 2023 Compliant</span>
+            <span>·</span>
+            <span>Offline-Ready</span>
+            <span>·</span>
+            <span>Public Service AI</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

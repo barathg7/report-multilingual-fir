@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronUp, Download, AlertTriangle, Loader2, XCircle
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { generateAndDownloadFIRDocx } from "@/lib/firDocxGenerator";
 
 const STATUS_OPTIONS = ["submitted", "investigating", "resolved", "closed", "fake_fir"];
 const STATUS_COLORS  = {
@@ -45,55 +46,16 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-async function downloadFIRDoc(fir, stationName, setDownloading) {
+async function downloadFIRDoc(fir, station, setDownloading) {
   setDownloading(fir.id);
   try {
-    const payload = {
-      id: fir.id,
-      complainantName:     fir.complainant_name,
-      complainantPhone:    fir.complainant_phone,
-      complainantAge:      fir.complainant_age,
-      complainantGender:   fir.complainant_gender,
-      complainantAddress:  fir.complainant_address,
-      incidentDate:        fir.incident_date,
-      incidentTime:        fir.incident_time,
-      incidentLocation:    fir.incident_location,
-      incidentDescription: fir.incident_description,
-      crimeType:           fir.crime_type,
-      ipcSections:         fir.ipc_sections || [],
-      suspectDescription:  fir.suspect_description,
-      stolenItems:         fir.stolen_items,
-      weaponUsed:          fir.weapon_used,
-      vehicleNumber:       fir.vehicle_number,
-      witnessNames:        fir.witness_names,
-      locationCity:        fir.location_city,
-      locationState:       fir.location_state || fir.selected_state,
-      locationAddress:     fir.location_address,
-      district:            fir.location_city,
-      policeStation:       stationName || fir.station_name || "REPORT Digital FIR",
-      incidentLatitude:    fir.incident_latitude,
-      incidentLongitude:   fir.incident_longitude,
-      createdDate:         fir.created_at?.split("T")[0],
-      createdTime:         fir.created_at
-        ? new Date(fir.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
-        : "",
-    };
-    const res  = await fetch("/api/generate-fir", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Generation failed");
-    const byteChars = atob(data.docx_base64);
-    const byteArr   = new Uint8Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([byteArr], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = data.filename || `FIR_${fir.id}.docx`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (e) { alert("Download failed: " + e.message); }
-  finally { setDownloading(null); }
+    await generateAndDownloadFIRDocx(fir, station);
+  } catch (e) {
+    console.error("Document download failed:", e);
+    alert("Could not generate official FIR document: " + e.message);
+  } finally {
+    setDownloading(null);
+  }
 }
 
 function FakeFIRModal({ fir, onClose, onConfirm, loading }) {
@@ -445,7 +407,7 @@ export default function PoliceDashboard() {
                       )}
 
                       {/* Download button */}
-                      <button onClick={() => downloadFIRDoc(fir, station.name, setDownloadingId)}
+                      <button onClick={() => downloadFIRDoc(fir, station, setDownloadingId)}
                         disabled={downloadingId === fir.id}
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold disabled:opacity-50">
                         {downloadingId === fir.id

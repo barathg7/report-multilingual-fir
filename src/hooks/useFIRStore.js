@@ -1,93 +1,155 @@
-// src/hooks/useFIRStore.js
-// FIXES: ✅ sketch URL, ✅ station_code, ✅ evidence_photos as array, ✅ duplicate check
+// src/hooks/useFIRStore.js — Canonical FIR Store for REPORT v2
 import { useState, useEffect, useCallback } from "react";
-import { loadFromStorage, saveToStorage, generateFIRId } from "@/utils";
+import { loadFromStorage, saveToStorage } from "@/utils";
 import { supabase, checkDuplicateFIR } from "@/lib/supabaseClient";
+import { normalizeFIR, toSupabaseRow, validateFIR, FIR_STATUSES } from "@/lib/firSchema";
 
 const STORE_KEY = "report_firs";
 
 export function useFIRStore() {
-  const [firs, setFirs]         = useState(() => loadFromStorage(STORE_KEY, []));
+  const [firs, setFirs] = useState(() => {
+    const rawList = loadFromStorage(STORE_KEY, []);
+    return Array.isArray(rawList) ? rawList.map(f => normalizeFIR(f)) : [];
+  });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync a single FIR to Supabase
+  const pushFIRToRemote = async (fir) => {
+    if (!navigator.onLine) return { success: false, reason: "offline" };
+    try {
+      const row = toSupabaseRow(fir);
+      const { error } = await supabase.from("firs").upsert(row, { onConflict: "id" });
+      if (error) {
+        console.warn("Supabase upsert warning:", error.message);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err) {
+      console.warn("Remote sync failed:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Sync all locally pending FIRs
+  const syncPending = useCallback(async () => {
+    if (!navigator.onLine || isSyncing) return;
+    setIsSyncing(true);
+
+    try {
+      const stored = loadFromStorage(STORE_KEY, []);
+      let hasUpdates = false;
+
+      const updatedList = await Promise.all(
+        stored.map(async (raw) => {
+          const fir = normalizeFIR(raw);
+          if (fir.status !== FIR_STATUSES.DRAFT && raw._syncStatus === "pending") {
+            const res = await pushFIRToRemote(fir);
+            if (res.success) {
+              hasUpdates = true;
+              return { ...fir, _syncStatus: "synced", _syncedAt: new Date().toISOString() };
+            }
+          }
+          return fir;
+        })
+      );
+
+      if (hasUpdates) {
+        saveToStorage(STORE_KEY, updatedList);
+        setFirs(updatedList.map(f => normalizeFIR(f)));
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing]);
 
   useEffect(() => {
-    const on = () => setIsOnline(true), off = () => setIsOnline(false);
-    window.addEventListener("online", on); window.addEventListener("offline", off);
-    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
-  }, []);
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPending();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [syncPending]);
 
   const saveFIR = useCallback(async (data) => {
-    const fir = { ...data, id: data.id || generateFIRId(), savedAt: new Date().toISOString(), status: data.status || "submitted" };
+    const canonical = normalizeFIR(data);
+    let syncStatus = "pending";
+
+    // Attempt remote save if submitted and online
+    if (canonical.status !== FIR_STATUSES.DRAFT && navigator.onLine) {
+      const res = await pushFIRToRemote(canonical);
+      if (res.success) {
+        syncStatus = "synced";
+      }
+    }
+
+    const recordToSave = {
+      ...canonical,
+      _syncStatus: syncStatus,
+      _savedAt: new Date().toISOString(),
+    };
 
     setFirs((prev) => {
-      const idx     = prev.findIndex((f) => f.id === fir.id);
-      const updated = idx >= 0 ? prev.map((f, i) => i === idx ? fir : f) : [fir, ...prev];
+      const idx = prev.findIndex((f) => f.id === canonical.id);
+      const updated = idx >= 0 ? prev.map((f, i) => (i === idx ? recordToSave : f)) : [recordToSave, ...prev];
       saveToStorage(STORE_KEY, updated);
-      return updated;
+      return updated.map(f => normalizeFIR(f));
     });
 
-    if (fir.status !== "draft") {
-      try {
-        const row = {
-          id: fir.id,
-          complainant_name:     fir.complainantName      || null,
-          complainant_phone:    fir.complainantPhone     || null,
-          complainant_email:    fir.complainantEmail     || null,
-          complainant_age:      fir.complainantAge       || null,
-          complainant_gender:   fir.complainantGender    || null,
-          complainant_address:  fir.complainantAddress   || null,
-          incident_date:        fir.incidentDate         || null,
-          incident_time:        fir.incidentTime         || null,
-          incident_location:    fir.incidentLocation     || null,
-          incident_description: fir.incidentDescription  || fir.transcribedText || null,
-          crime_type:           fir.crimeType            || null,
-          ipc_sections:         fir.ipcSections?.length  ? fir.ipcSections : [],
-          suspect_description:  fir.suspectDescription   || null,
-          stolen_items:         fir.stolenItems          || null,
-          weapon_used:          fir.weaponUsed           || null,
-          vehicle_number:       fir.vehicleNumber        || null,
-          witness_names:        fir.witnessNames         || null,
-          location_landmarks:   fir.locationLandmarks    || null,
-          location_area:        fir.locationArea         || null,
-          location_city:        fir.locationCity         || fir.location?.city      || null,
-          location_state:       fir.locationState        || fir.location?.state     || null,
-          location_postcode:    fir.locationPostcode     || fir.location?.postcode  || null,
-          incident_latitude:    fir.incidentLatitude     || fir.location?.latitude  || null,
-          incident_longitude:   fir.incidentLongitude    || fir.location?.longitude || null,
-          location_address:     fir.locationAddress      || fir.location?.displayName || null,
-          language:             fir.language             || null,
-          transcribed_text:     fir.transcribedText      || fir.transcript || null,
-          evidence_photos:      fir.evidencePhotos?.length ? fir.evidencePhotos : [],  // ✅ always array
-          suspect_sketch_url:   fir.suspectSketchUrl     || fir.sketch?.url || null,   // ✅ sketch URL
-          station_id:           fir.stationId            || null,                       // ✅ station
-          station_code:         fir.stationCode          || null,                       // ✅ isolation key
-          station_name:         fir.stationName          || null,
-          selected_state:       fir.selectedState        || fir.locationState || fir.location?.state || null,
-          status:               fir.status               || "submitted",
-        };
-        const { error } = await supabase.from("firs").upsert(row, { onConflict: "id" });
-        if (error) console.warn("Supabase:", error.message);
-        else console.log("✅ FIR saved:", fir.id);
-      } catch (e) { console.warn("Offline:", e.message); }
-    }
-    return fir;
+    return canonical;
   }, []);
 
   // Check duplicate by phone + incident_date
   const checkDuplicate = useCallback(async (phone, incidentDate) => {
-    const local = firs.find(f =>
-      f.complainantPhone === phone && f.incidentDate === incidentDate &&
-      f.status !== "fake_fir" && f.status !== "draft"
-    );
+    if (!phone || !incidentDate) return { isDuplicate: false };
+
+    const cleanPhone = phone.replace(/\D/g, "").slice(-10);
+
+    const local = firs.find(f => {
+      const fPhone = (f.complainant?.phone || f.complainantPhone || "").replace(/\D/g, "").slice(-10);
+      const fDate = f.incident?.date || f.incidentDate;
+      return (
+        fPhone === cleanPhone &&
+        fDate === incidentDate &&
+        f.status !== FIR_STATUSES.FAKE_FIR &&
+        f.status !== FIR_STATUSES.DRAFT
+      );
+    });
+
     if (local) return { isDuplicate: true, existingId: local.id };
+
     try {
-      return { isDuplicate: await checkDuplicateFIR(phone, incidentDate) };
-    } catch { return { isDuplicate: false }; }
+      const isRemoteDuplicate = await checkDuplicateFIR(phone, incidentDate);
+      return { isDuplicate: Boolean(isRemoteDuplicate) };
+    } catch {
+      return { isDuplicate: false };
+    }
   }, [firs]);
 
   const deleteFIR = useCallback((id) => {
-    setFirs((prev) => { const u = prev.filter(f => f.id !== id); saveToStorage(STORE_KEY, u); return u; });
+    setFirs((prev) => {
+      const updated = prev.filter((f) => f.id !== id);
+      saveToStorage(STORE_KEY, updated);
+      return updated;
+    });
   }, []);
 
-  return { firs, saveFIR, deleteFIR, isOnline, pendingCount: firs.filter(f => f.status === "draft").length, checkDuplicate };
+  return {
+    firs,
+    saveFIR,
+    deleteFIR,
+    isOnline,
+    isSyncing,
+    syncPending,
+    validateFIR,
+    pendingCount: firs.filter((f) => f.status === FIR_STATUSES.DRAFT || f._syncStatus === "pending").length,
+    checkDuplicate,
+  };
 }

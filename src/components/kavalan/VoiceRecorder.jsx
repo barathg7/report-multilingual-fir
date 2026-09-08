@@ -505,13 +505,14 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
         },
       ], 1400);
 
-      // Parse with better error handling
+      // Parse with safe error handling — NEVER fabricate fake fallback data
       let extracted = {};
       try {
         extracted = GroqManager.safeParseJSON(extractedRaw);
       } catch (parseErr) {
-        console.warn("Structured parse issue, attempting fallback:", parseErr.message);
-        extracted = extractDataFallback(corrected) || {};
+        console.warn("Structured parse issue:", parseErr.message);
+        setProcessingError("AI structured extraction failed to parse. Your spoken statement is preserved. You can edit details directly or tap Retry AI.");
+        extracted = {};
       }
 
       setCrimeExtracted(extracted);
@@ -522,7 +523,8 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       const honestScore = Math.max(0.3, calculateCompleteness(normalized) / 100);
 
       onComplete?.({ 
-        text: correctedEnglish,          // Always English for the FIR description
+        text: correctedEnglish,          // English description
+        rawText: rawText,                // Preserve raw spoken audio text
         extracted: normalized, 
         confidence: honestScore, 
         language 
@@ -530,13 +532,14 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
 
     } catch (err) {
       console.error("Processing failed:", err);
-      setProcessingError(`Processing failed: ${err.message}`);
+      setProcessingError(`AI extraction unavailable (${err.message}). Your spoken statement is preserved below. You can edit directly or tap Retry AI.`);
       
-      // Still provide the raw text so user can proceed manually
+      // Still provide the raw text so user can proceed manually without fabricated data
       onComplete?.({ 
         text: rawText, 
+        rawText: rawText,
         extracted: {}, 
-        confidence: 0.5, 
+        confidence: null, 
         language,
         error: err.message
       });
@@ -544,55 +547,6 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       setProcessing(false);
       setProcessingLabel("");
     }
-  };
-
-  // Fallback extraction when JSON parsing fails
-  const extractDataFallback = (text) => {
-    const extracted = {
-      complainantName: "",
-      complainantPhone: "",
-      complainantAge: "",
-      incidentDate: "",
-      incidentTime: "",
-      incidentLocation: "",
-      crimeType: "",
-      suspectDescription: "",
-      stolenItems: "",
-      ipcSections: [],
-    };
-
-    // Simple regex extractions
-    const nameMatch = text.match(/my name is (\w+)/i);
-    if (nameMatch) extracted.complainantName = nameMatch[1];
-
-    const phoneMatch = text.match(/phone (\d{10})/i);
-    if (phoneMatch) extracted.complainantPhone = phoneMatch[1];
-
-    const ageMatch = text.match(/age (\d+)/i);
-    if (ageMatch) extracted.complainantAge = ageMatch[1];
-
-    const yesterdayMatch = text.match(/yesterday/i);
-    const todayMatch = text.match(/today/i);
-    const ctx = getTodayContext();
-    if (yesterdayMatch) extracted.incidentDate = ctx.yesterdayFormatted;
-    else if (todayMatch) extracted.incidentDate = ctx.todayFormatted;
-
-    const timeMatch = text.match(/(\d{1,2})\s*(am|pm)/i);
-    if (timeMatch) {
-      extracted.incidentTime = `${timeMatch[1]}:00 ${timeMatch[2].toUpperCase()}`;
-    }
-
-    const locationMatch = text.match(/near\s+([^,]+)/i);
-    if (locationMatch) extracted.incidentLocation = locationMatch[1];
-
-    // Chain snatching detection
-    if (text.match(/chain|snatched|snatch/i)) {
-      extracted.crimeType = "Chain Snatching";
-      extracted.ipcSections = ["309B", "304"]; // BNS: Robbery + Theft
-      extracted.stolenItems = "Gold chain";
-    }
-
-    return Object.values(extracted).some(v => v && v.length > 0) ? extracted : null;
   };
 
   const processLocationStatement = async (rawText) => {
@@ -619,14 +573,19 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
         },
       ], 400);
 
-      const result = parseJSON(extractedRaw);
+      let result = {};
+      try {
+        result = GroqManager.safeParseJSON(extractedRaw);
+      } catch (_) {
+        result = {};
+      }
       setLocationExtracted(result);
     } catch (err) {
       console.error("Location extraction failed:", err);
       setLocationExtracted({ 
         incidentLocation: rawText, 
         searchQuery: rawText,
-        nearestLandmark: rawText.split(',')[0] || rawText
+        nearestLandmark: ""
       });
     } finally {
       setProcessing(false);
@@ -650,10 +609,12 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       fullLocationDescription: locationExtracted.fullLocationDescription || "",
     };
     setApproved(true);
+    const honestScore = Math.max(0.3, calculateCompleteness(merged) / 100);
     onComplete?.({
       text: (crimeVoice.transcript + " " + locationVoice.transcript).trim(),
+      rawText: (crimeVoice.transcript + " " + locationVoice.transcript).trim(),
       extracted: merged,
-      confidence: 0.95,
+      confidence: honestScore,
       language,
     });
   };
@@ -741,10 +702,10 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
             <p className="text-xs text-gray-500 mt-1">
               Include: your name, phone, age, what happened, when, where
             </p>
-            <div className="bg-blue-50 rounded-lg p-2 mt-2">
-              <p className="text-xs text-blue-700 font-medium">💡 Example:</p>
-              <p className="text-xs text-blue-600 mt-0.5">
-                "My name is Priya, phone 9876543210, age 24. Yesterday at 7pm near Phoenix Mall Velachery Chennai, a man on a bike snatched my gold chain and fled northward..."
+            <div className="bg-blue-50 rounded-lg p-2.5 mt-2">
+              <p className="text-xs text-blue-700 font-semibold">💡 What to state clearly:</p>
+              <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">
+                State your full name, contact mobile number, date and time of the incident, the specific location, and what happened in your own words.
               </p>
             </div>
           </div>
@@ -753,7 +714,7 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
             voice={crimeVoice}
             onStop={processCrimeStatement}
             onStart={processCrimeStatement}
-            hint="Tap stop when done — AI will extract all details automatically"
+            hint="Tap stop when done — speech recognition will transcribe your statement"
           />
 
           {crimeVoice.error && (
@@ -764,9 +725,18 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
           )}
 
           {processingError && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{processingError}</span>
+            <div className="flex items-start justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                <span>{processingError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => processCrimeStatement(crimeVoice.transcript)}
+                className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs shrink-0 transition cursor-pointer"
+              >
+                Retry AI
+              </button>
             </div>
           )}
 

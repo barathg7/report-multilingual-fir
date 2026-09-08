@@ -154,7 +154,7 @@ export default function PoliceDashboard() {
 
   useEffect(() => {
     const raw = sessionStorage.getItem("police_station");
-    if (!raw) { navigate("/#/police-login"); return; }
+    if (!raw) { navigate("/police-login"); return; }
     const s = JSON.parse(raw);
     setStation(s);
     fetchFIRs(s);

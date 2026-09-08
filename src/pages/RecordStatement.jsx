@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Mic, User, Shield, MapPin, Camera, CheckCircle, FileText } from "lucide-react";
 import StepBar from "@/components/ui/StepBar";
 import Button from "@/components/ui/Button";
@@ -122,6 +123,7 @@ function formatTimeForDisplay(hhmm) {
 }
 
 export default function RecordStatement() {
+  const navigate = useNavigate();
   const [step, setStep]             = useState(0);
   const [lang, setLang]             = useState(null);
   const [langSearch, setLangSearch] = useState("");
@@ -606,7 +608,7 @@ export default function RecordStatement() {
           <FIRDownload fir={firData} location={location} />
         </div>
         <div className="flex gap-3 justify-center flex-wrap">
-          <Button onClick={() => window.location.href = "/#/fir-history"}>View FIR History</Button>
+          <Button onClick={() => navigate("/fir-history")}>View FIR History</Button>
           <Button variant="outline" onClick={resetAll}>File Another FIR</Button>
         </div>
       </div>

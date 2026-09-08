@@ -13,7 +13,7 @@ export default function Analytics() {
 
   useEffect(() => {
     const raw = sessionStorage.getItem("police_station");
-    if (!raw) { navigate("/#/police-login"); return; }
+    if (!raw) { navigate("/police-login"); return; }
     const s = JSON.parse(raw);
     setStation(s);
     fetchFIRs(s);
@@ -87,7 +87,7 @@ export default function Analytics() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-blue-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-lg">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/#/police-dashboard")} className="text-blue-300 hover:text-white">
+          <button onClick={() => navigate("/police-dashboard")} className="text-blue-300 hover:text-white">
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">

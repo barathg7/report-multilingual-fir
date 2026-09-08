@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./Layout";
 import LandingPage from "./pages/LandingPage";
-import CitizenLogin from "./pages/CitizenLogin";   {/* ← ADDED (new import) */}
+import CitizenLogin from "./pages/CitizenLogin";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import RecordStatement from "./pages/RecordStatement";

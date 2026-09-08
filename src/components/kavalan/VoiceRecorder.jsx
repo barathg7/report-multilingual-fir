@@ -3,6 +3,7 @@ import { Mic, MicOff, CheckCircle, AlertTriangle, Sparkles, MapPin, FileText, Wa
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import GroqManager from './GroqManager';
+import { calculateCompleteness } from "@/lib/firSchema";
 
 const LANG_MAP = {
   ta:"ta-IN", hi:"hi-IN", en:"en-IN", te:"te-IN", kn:"kn-IN", ml:"ml-IN",
@@ -326,7 +327,14 @@ export default function VoiceRecorder({ language, onComplete }) {
     if (!rawText?.trim()) return;
     
     if (!apiKey) {
-      setProcessingError("VITE_GROQ_API_KEY is not set. Add it to your .env file.");
+      setProcessingError("AI service key not configured. Your transcript is saved and you can proceed with manual review.");
+      setCorrectedText(rawText);
+      onComplete?.({
+        text: rawText,
+        extracted: {},
+        confidence: 0.3,
+        language,
+      });
       return;
     }
 
@@ -498,17 +506,12 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       ], 1400);
 
       // Parse with better error handling
-      let extracted;
+      let extracted = {};
       try {
-        extracted = parseJSON(extractedRaw);
+        extracted = GroqManager.safeParseJSON(extractedRaw);
       } catch (parseErr) {
-        console.error("Parse error, raw response:", extractedRaw);
-        
-        // Try to extract data using regex as fallback
-        extracted = extractDataFallback(corrected);
-        if (!extracted) {
-          throw parseErr;
-        }
+        console.warn("Structured parse issue, attempting fallback:", parseErr.message);
+        extracted = extractDataFallback(corrected) || {};
       }
 
       setCrimeExtracted(extracted);
@@ -516,10 +519,12 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       const normalized = normalizeExtracted(extracted);
       latestExtractedRef.current = normalized;
 
+      const honestScore = Math.max(0.3, calculateCompleteness(normalized) / 100);
+
       onComplete?.({ 
-        text: correctedEnglish,          // ✅ Always English for the FIR description
+        text: correctedEnglish,          // Always English for the FIR description
         extracted: normalized, 
-        confidence: 0.95, 
+        confidence: honestScore, 
         language 
       });
 

@@ -12,6 +12,8 @@ import PhotoUpload from "@/components/kavalan/PhotoUpload";
 import SuspectSketch from "@/components/kavalan/SuspectSketch";
 import FIRDocument from "@/components/kavalan/FIRDocument";
 import FIRDownload from "@/components/kavalan/FIRDownload";
+import DigitalSignature from "@/components/kavalan/DigitalSignature";
+import { normalizeFIR } from "@/lib/firSchema";
 import { useFIRStore } from "@/hooks/useFIRStore";
 import { getNearbyStations } from "@/utils/policeStations";
 import { suggestIPCSections, validateIPCSections } from "@/utils/bnsValidator";
@@ -135,6 +137,8 @@ export default function RecordStatement() {
   const [firData, setFirData]           = useState(null);
   const [duplicateWarning, setDupWarn]  = useState(null);
   const [submitting, setSubmitting]     = useState(false);
+  const [signature, setSignature]       = useState(null);
+  const [declarationAgreed, setDeclarationAgreed] = useState(false);
   const [ipcInput, setIpcInput]     = useState("");
   const [ipcValidation, setIpcValidation] = useState(null);
   const [form, setForm]             = useState(EMPTY_FORM);
@@ -244,6 +248,10 @@ export default function RecordStatement() {
   };
 
   const handleSubmit = async () => {
+    if (!declarationAgreed) {
+      alert("Please review and agree to the statutory declaration before submitting.");
+      return;
+    }
     setSubmitting(true);
     try {
       // ✅ Duplicate check — prevent re-filing same complaint
@@ -259,7 +267,7 @@ export default function RecordStatement() {
       // ✅ Find nearest police station from GPS (for station isolation)
       const incLat  = location?.latitude  || null;
       const incLng  = location?.longitude || null;
-      const incState = location?.state || form.locationState || "";
+      const incState = location?.state || form.locationState || "Tamil Nadu";
       let stationCode = "", stationName = "", stationId = "";
       if (incLat && incLng) {
         const nearby = getNearbyStations(incLat, incLng, 50, 1);
@@ -270,33 +278,36 @@ export default function RecordStatement() {
         }
       }
 
-      const fir = {
+      const rawFIR = {
         ...form,
         id:                generateFIRId(),
-        language:          lang?.name,
+        language:          lang?.name || "English",
         transcribedText:   transcript,
         incidentLatitude:  incLat,
         incidentLongitude: incLng,
-        locationAddress:   location?.displayName || location?.address,
+        locationAddress:   location?.displayName || location?.address || form.incidentLocation,
         locationRoad:      location?.road,
         locationSuburb:    location?.suburb,
         locationCity:      location?.city || form.locationCity,
         locationState:     incState,
         locationPostcode:  location?.postcode,
-        evidencePhotos:    photos.map(p => p.url || p),
-        suspectSketchUrl:  sketch?.url || "",          // ✅ sketch URL
+        evidencePhotos:    photos.map(p => (typeof p === "string" ? p : p.dataUrl || p.url || "")).filter(Boolean),
+        suspectSketchUrl:  sketch?.url || "",
         ipcValidated:      ipcValidation?.isValid || false,
-        // ✅ Station assignment — enables station isolation in police dashboard
+        signatureDataUrl:  signature?.imageData || null,
+        signatureDate:     signature?.signedAt || (signature ? new Date().toISOString() : null),
         stationCode,
         stationName,
         stationId,
         selectedState:     incState,
         status:            "submitted",
         createdAt:         new Date().toISOString(),
-        complainantEmail:  citizenEmail,   // from CitizenLogin session
+        complainantEmail:  citizenEmail,
       };
-      const saved = await saveFIR(fir);
-      setFirData(saved || fir);
+
+      const normalized = normalizeFIR(rawFIR);
+      const saved = await saveFIR(normalized);
+      setFirData(saved || normalized);
       setSubmitted(true);
     } catch (err) {
       console.error("Submit error:", err);
@@ -311,6 +322,7 @@ export default function RecordStatement() {
     setLang(null); setLangSearch(""); setLocation(null);
     setPhotos([]); setSketch(null); setFirData(null);
     setForm(EMPTY_FORM); setIpcValidation(null);
+    setSignature(null); setDeclarationAgreed(false);
     extractedRef.current = null;
   };
 
@@ -506,21 +518,32 @@ export default function RecordStatement() {
 
         {/* IPC Sections panel */}
         {form.ipcSections.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-            <p className="text-sm font-semibold text-blue-700 flex items-center gap-1">
-              <Shield className="h-4 w-4" /> BNS Sections — Auto-assigned by Groq AI
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-blue-900 flex items-center gap-1.5">
+                  <Shield className="h-4 w-4 text-blue-600 shrink-0" />
+                  Potentially Relevant BNS Sections
+                </p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  AI-generated suggestion — requires police/legal verification.
+                </p>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
+                AI Suggestion
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
               {form.ipcSections.map(s => (
-                <span key={s} className="inline-flex items-center gap-1 bg-white border border-blue-300 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">
+                <span key={s} className="inline-flex items-center gap-1.5 bg-white border border-blue-300 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full shadow-2xs">
                   BNS §{s}
-                  <button onClick={() => removeIPC(s)} className="ml-1 text-blue-300 hover:text-red-500 font-bold">×</button>
+                  <button type="button" onClick={() => removeIPC(s)} className="text-blue-400 hover:text-red-500 font-bold ml-1">×</button>
                 </span>
               ))}
             </div>
             {ipcValidation && (
-              <p className={`text-xs font-medium ${ipcValidation.isValid ? "text-green-600" : "text-amber-600"}`}>
-                {ipcValidation.isValid ? "✅ All sections verified" : `⚠️ ${ipcValidation.summary}`}
+              <p className={`text-xs font-medium ${ipcValidation.isValid ? "text-emerald-700" : "text-amber-700"}`}>
+                {ipcValidation.isValid ? "✅ All suggested sections verified in legal database" : `⚠️ ${ipcValidation.summary}`}
               </p>
             )}
           </div>
@@ -590,7 +613,7 @@ export default function RecordStatement() {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">FIR Submitted!</h2>
-          <p className="text-gray-500 mt-1">உங்கள் புகார் பதிவு செய்யப்பட்டது</p>
+          <p className="text-gray-500 mt-1">உங்கள் புகார் பதிவு செய்யப்பட்டது · Statement Recorded Officially</p>
           <div className="inline-block mt-3 bg-blue-50 border border-blue-200 rounded-xl px-6 py-2">
             <p className="text-sm font-mono font-bold text-blue-700">{firData?.id}</p>
           </div>
@@ -613,44 +636,97 @@ export default function RecordStatement() {
         </div>
       </div>
     ) : (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">Review & Submit FIR</h2>
-        <p className="text-sm text-gray-500">Verify all details before submitting</p>
-        <div className="bg-white border border-gray-200 rounded-2xl divide-y text-sm">
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Review & Verify FIR Details</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Please review each entry carefully. Badges denote the provenance source of each data point.
+          </p>
+        </div>
+
+        {/* Provenance Badge Legend */}
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+          <span className="font-semibold text-slate-700 mr-1">Data Source:</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">USER-PROVIDED</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">AI-EXTRACTED</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 border border-slate-300">SYSTEM-GENERATED</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">POLICE-VERIFIED</span>
+        </div>
+
+        {/* Structured Field Review List with Badges */}
+        <div className="bg-white border border-gray-200 rounded-2xl divide-y text-sm overflow-hidden">
           {[
-            ["Language",    lang?.name],
-            ["Name",        form.complainantName],
-            ["Phone",       form.complainantPhone],
-            ["Age/Gender",  [form.complainantAge, form.complainantGender].filter(Boolean).join(" / ")],
-            ["Address",     form.complainantAddress],
-            ["Crime Type",  form.crimeType],
-            // CHANGED: show readable date/time in the review panel too
-            ["Date",        formatDateForDisplay(form.incidentDate)],
-            ["Time",        formatTimeForDisplay(form.incidentTime)],
-            ["Location",    form.incidentLocation],
-            ["Landmarks",   form.locationLandmarks],
-            ["City",        [form.locationArea, form.locationCity].filter(Boolean).join(", ")],
-            ["GPS",         location ? `${location.latitude?.toFixed(5)}, ${location.longitude?.toFixed(5)}` : "Not captured"],
-            ["Address",     location?.displayName],
-            ["Stolen",      form.stolenItems],
-            ["Weapon",      form.weaponUsed],
-            ["Vehicle",     form.vehicleNumber],
-            ["Witnesses",   form.witnessNames],
-            ["BNS",         form.ipcSections.map(s => `§${s}`).join(", ") || "None"],
-            ["Photos",      `${photos.length} attached`],
-            ["Sketch",      sketch ? "✅ Generated" : "Not generated"],
-          ].map(([label, value]) => value ? (
-            <div key={label} className="flex px-4 py-2.5 gap-3">
-              <span className="text-gray-500 font-medium w-28 shrink-0 text-xs">{label}</span>
-              <span className="text-gray-800 text-xs break-words">{value}</span>
+            { label: "Language", value: lang?.name, source: "USER-PROVIDED" },
+            { label: "Complainant Name", value: form.complainantName, source: "USER-PROVIDED" },
+            { label: "Phone Number", value: form.complainantPhone, source: "USER-PROVIDED" },
+            { label: "Age / Gender", value: [form.complainantAge, form.complainantGender].filter(Boolean).join(" / "), source: "USER-PROVIDED" },
+            { label: "Residential Address", value: form.complainantAddress, source: "USER-PROVIDED" },
+            { label: "Crime Category", value: form.crimeType, source: "AI-EXTRACTED" },
+            { label: "Incident Date", value: formatDateForDisplay(form.incidentDate), source: "AI-EXTRACTED" },
+            { label: "Incident Time", value: formatTimeForDisplay(form.incidentTime), source: "AI-EXTRACTED" },
+            { label: "Reported Location", value: form.incidentLocation, source: "AI-EXTRACTED" },
+            { label: "Nearest Landmark", value: form.locationLandmarks || form.nearestLandmark, source: "AI-EXTRACTED" },
+            { label: "GPS Coordinates", value: location ? `${location.latitude?.toFixed(5)}°N, ${location.longitude?.toFixed(5)}°E` : "Not captured", source: "SYSTEM-GENERATED" },
+            { label: "Geocoded Address", value: location?.displayName || location?.address, source: "SYSTEM-GENERATED" },
+            { label: "Stolen / Damaged", value: form.stolenItems, source: "AI-EXTRACTED" },
+            { label: "Weapon Used", value: form.weaponUsed, source: "AI-EXTRACTED" },
+            { label: "Vehicle Number", value: form.vehicleNumber, source: "AI-EXTRACTED" },
+            { label: "Witness Names", value: form.witnessNames, source: "AI-EXTRACTED" },
+            { label: "Suggested BNS Sections", value: form.ipcSections.map(s => `§${s}`).join(", ") || "None", source: "AI-EXTRACTED" },
+            { label: "Evidence Photos", value: photos.length > 0 ? `${photos.length} attached` : "None attached", source: "USER-PROVIDED" },
+            { label: "Suspect Sketch", value: sketch ? "✅ Generated & Attached" : "None provided", source: "AI-EXTRACTED" },
+            { label: "Station Jurisdiction", value: "Auto-routed to jurisdictional PS", source: "SYSTEM-GENERATED" },
+            { label: "Police Status", value: "Pending Station Verification", source: "POLICE-VERIFIED" },
+          ].map((item, idx) => item.value ? (
+            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 gap-2 hover:bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 font-medium text-xs w-36 shrink-0">{item.label}</span>
+                <span className="text-gray-900 text-xs font-semibold break-words">{item.value}</span>
+              </div>
+              <span className={`self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${
+                item.source === "USER-PROVIDED" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                item.source === "AI-EXTRACTED" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                item.source === "SYSTEM-GENERATED" ? "bg-slate-100 text-slate-700 border-slate-200" :
+                "bg-amber-50 text-amber-700 border-amber-200"
+              }`}>
+                {item.source}
+              </span>
             </div>
           ) : null)}
         </div>
+
+        {/* Digital Signature Component */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Digital Signature Verification</p>
+          <DigitalSignature
+            label="Complainant Legal Signature"
+            signerName={form.complainantName || "Complainant"}
+            signerRole="Complainant"
+            onSign={(sig) => setSignature(sig)}
+          />
+        </div>
+
+        {/* Statutory Declaration Checkbox */}
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={declarationAgreed}
+              onChange={(e) => setDeclarationAgreed(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+            />
+            <div className="text-xs text-slate-700 leading-relaxed">
+              <strong>Statutory Declaration:</strong> I hereby certify that the information provided above is true and correct to the best of my personal knowledge and belief. I understand that submitting false, frivolous, or vexatious information is a punishable criminal offense under <strong>Section 217 of Bharatiya Nyaya Sanhita (BNS 2023)</strong> and the <strong>Information Technology Act, 2000</strong>.
+            </div>
+          </label>
+        </div>
+
         {!isOnline && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
-            ⚠️ Offline — FIR saved locally, syncs when connected.
+            ⚠️ Offline — FIR saved locally, syncs automatically when network is reconnected.
           </div>
         )}
+
         {/* Duplicate warning */}
         {duplicateWarning && (
           <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 space-y-2">
@@ -658,7 +734,7 @@ export default function RecordStatement() {
             <p className="text-amber-700 text-xs">
               A complaint from this phone number for the same incident date already exists
               (ID: <strong>{duplicateWarning}</strong>). Filing a duplicate FIR may constitute
-              misuse of the system and is punishable under IPC §182.
+              misuse of the system and is punishable under IPC §182 / BNS §217.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDupWarn(null)}
@@ -673,11 +749,17 @@ export default function RecordStatement() {
           </div>
         )}
 
-        <Button full size="lg" variant="success" onClick={handleSubmit} disabled={submitting}>
+        <Button full size="lg" variant="success" onClick={handleSubmit} disabled={submitting || !declarationAgreed}>
           {submitting
             ? <><span className="animate-spin">⏳</span> Submitting…</>
             : <><CheckCircle className="h-5 w-5" /> Submit FIR Officially</>}
         </Button>
+
+        {!declarationAgreed && (
+          <p className="text-center text-[11px] text-slate-500">
+            * Please accept the statutory declaration above to enable submission
+          </p>
+        )}
       </div>
     );
   };

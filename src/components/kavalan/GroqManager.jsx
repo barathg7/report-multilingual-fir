@@ -18,12 +18,15 @@ const GROQ_PROXY_URL = "/api/ai/groq";
 export class GroqManager {
   constructor() {
     // No API key stored client-side. All auth handled server-side.
-    this.primaryModel = "groq/compound-mini";
+    this.primaryModel = "llama-3.3-70b-versatile";
+    // NOTE: Only pure text-generation models here.
+    // groq/compound-*, qwen/*, openai/gpt-oss-* use tool-call contracts
+    // and can return empty text ("model output must contain either output
+    // text or tool calls"), so they are intentionally excluded.
     this.backupModels = [
-      "groq/compound",
-      "qwen/qwen3.6-27b",
-      "qwen/qwen3.8-27b",
-      "llama-3.3-70b-versatile",
+      "llama-3.1-70b-versatile",
+      "mixtral-8x7b-32768",
+      "llama-3.1-8b-instant",
     ];
   }
 
@@ -47,7 +50,7 @@ export class GroqManager {
           clearTimeout(timeoutId);
 
           if (response.status === 429) {
-            console.warn(`⚠️ Groq Rate limit on ${model}, trying fallback model...`);
+            console.warn(`⚠️ Groq rate limit on ${model}, trying fallback model...`);
             break; // Try next model
           }
 
@@ -57,6 +60,16 @@ export class GroqManager {
               errData.message ||
                 "AI service is not configured on the server. Set GROQ_API_KEY (without VITE_ prefix) in your server environment."
             );
+          }
+
+          // 400 from Groq often means the model has incompatible output
+          // constraints (e.g. compound routing models that require tool calls).
+          // Skip to the next model rather than surfacing a raw API error.
+          if (response.status === 400) {
+            const errData = await response.json().catch(() => ({}));
+            const msg = errData?.error?.message || "";
+            console.warn(`⚠️ Groq 400 on ${model}: ${msg} — trying fallback model...`);
+            break; // Try next model
           }
 
           if (!response.ok) {

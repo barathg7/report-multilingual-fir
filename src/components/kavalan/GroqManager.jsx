@@ -6,34 +6,47 @@
  *   In dev: Vite reads process.env.GROQ_API_KEY (no VITE_ prefix).
  *   In production: Vercel serverless function holds GROQ_API_KEY server-side.
  *
- * MODEL SELECTION — Verified against live Groq API on 2026-09-09:
+ * MODEL CHAIN — 16-case FIR benchmark (2026-09-09):
  * ─────────────────────────────────────────────────────────────────
- * This account has 14 models; llama/mixtral/gemma are NOT present.
- * Benchmark results (FIR JSON extraction, 4-point score):
+ * Model                  Score   Lat(avg)  JSON mode  Fabrication  Notes
+ * openai/gpt-oss-20b    15/16   1204ms    SUPPORTED  0/16         1 transient empty
+ * openai/gpt-oss-120b   16/16   2186ms    NOT SUPP   0/16         perfect, no JSON mode
+ * qwen/qwen3.8-27b      11/16    732ms    SUPPORTED  0/16         5 empty (rate-limited in bench)
  *
- *   PRIMARY  : qwen/qwen3.8-27b      score=4/4, latency≈1025ms, no think-tags
- *   FALLBACK1: openai/gpt-oss-20b    score=4/4, latency≈2262ms
- *   FALLBACK2: openai/gpt-oss-120b   score=4/4, latency≈2258ms, highest quality
- *   FALLBACK3: groq/compound-mini    score=4/4, latency≈3245ms, last resort
+ * Chain:
+ *   PRIMARY  : openai/gpt-oss-20b   — best reliability+speed balance
+ *   FALLBACK1: openai/gpt-oss-120b  — perfect reliability, slowest
+ *   FALLBACK2: qwen/qwen3.8-27b     — fast for English; last resort
+ *   → safe application error if all three fail
  *
- * EXCLUDED (with reasons):
- *   qwen/qwen3.6-27b  — emits <think> reasoning tags that corrupt JSON (1/4)
- *   allam-2-7b        — invalid JSON output for FIR extraction (1/4)
- *   groq/compound     — redundant with compound-mini; slower
- *   llama-3.3-70b-versatile, llama-3.1-70b-versatile,
- *   mixtral-8x7b-32768, llama-3.1-8b-instant — NOT in this API key's plan
+ * IMPORTANT — JSON mode compatibility:
+ *   openai/gpt-oss-20b  : response_format json_object SUPPORTED
+ *   openai/gpt-oss-120b : response_format json_object NOT SUPPORTED (returns 400)
+ *   qwen/qwen3.8-27b    : response_format json_object SUPPORTED
+ *   → We do NOT send response_format to avoid 400 on gpt-oss-120b.
+ *   → All three return valid JSON from prompt instruction alone.
+ *
+ * EXCLUDED (document reasons; do NOT re-add without re-running benchmark):
+ *   groq/compound-mini  — no tool/web-search contract in this app
+ *   qwen/qwen3.6-27b    — emits <think> tags that corrupt JSON (1/4 old score)
+ *   allam-2-7b          — invalid JSON output (1/4 old score)
+ *   groq/compound       — agentic routing model
+ *   llama-3.3/3.1-70b-versatile, mixtral-8x7b-32768,
+ *   llama-3.1-8b-instant — NOT in this API key's plan
  *
  * ERROR CLASSIFICATION:
  * ─────────────────────────────────────────────────────────────────
- *   RETRY / TRY-NEXT: 429, 500, 502, timeout, empty content
- *   TRY-NEXT ONLY:    400 with model compatibility errors
- *   THROW IMMEDIATELY: 503 (key not set), 400 auth/schema errors
+ *   429, 500, 502, timeout, empty content → next model
+ *   invalid JSON, schema fail              → next model
+ *   400 model compat                       → next model
+ *   401, 403, 503, 400-auth/schema         → fail immediately
  *
  * Strict rules:
  * 1. NEVER fabricate fake FIR data.
- * 2. Strip <think> tags; robust JSON extraction with safe repair.
+ * 2. Strip <think> tags; STRICT JSON parse — trailing-comma repair only.
  * 3. Failures never crash UI or expose API keys to client.
  */
+
 
 const GROQ_PROXY_URL = "/api/ai/groq";
 
@@ -49,13 +62,22 @@ function _logModelEvent(model, httpStatus, errType, errMsg) {
 export class GroqManager {
   constructor() {
     // No API key stored client-side. All auth handled server-side.
-    // Models verified live against Groq API 2026-09-09.
-    // Re-run audit_groq_models.cjs + test_fir_extraction.cjs before changing.
-    this.primaryModel = "qwen/qwen3.8-27b";
+    //
+    // Chain based on 16-case benchmark 2026-09-09.
+    // Re-run benchmark_fir_extraction.cjs before modifying.
+    //
+    // JSON mode compatibility (response_format: json_object):
+    //   openai/gpt-oss-20b  : SUPPORTED
+    //   openai/gpt-oss-120b : NOT SUPPORTED — returns HTTP 400 with JSON mode
+    //   qwen/qwen3.8-27b    : SUPPORTED
+    // → We do NOT send response_format to the proxy to avoid breaking gpt-oss-120b.
+    //   All three produce valid JSON from prompt instruction alone.
+    this.primaryModel = "openai/gpt-oss-20b";
     this.backupModels = [
-      "openai/gpt-oss-20b",    // score=4/4, latency~2262ms
-      "openai/gpt-oss-120b",   // score=4/4, latency~2258ms, highest quality
-      "groq/compound-mini",    // score=4/4, latency~3245ms, last resort
+      "openai/gpt-oss-120b",  // 16/16, highest reliability, no JSON mode
+      "qwen/qwen3.8-27b",     // 11/16 in bench (rate-limited); fast last resort
+      // groq/compound-mini intentionally excluded: this application has no
+      // tool/web-search contract; excluded to keep extraction strictly predictable.
     ];
   }
 
@@ -106,7 +128,7 @@ export class GroqManager {
             );
           }
 
-          // ── HTTP 400 — classify precisely (do NOT blindly skip) ───────
+          // ── HTTP 400 — classify precisely ─────────────────────────────
           if (response.status === 400) {
             let errData = {};
             try { errData = await response.json(); } catch { /* ignore */ }
@@ -115,7 +137,7 @@ export class GroqManager {
             const errMsg  = errData?.error?.message || "";
             _logModelEvent(model, 400, errType, errMsg);
 
-            // Fatal request errors (same error on every model — don't cycle)
+            // Fatal request errors — will fail identically on every model
             const isFatalRequest =
               errType === "authentication_error" ||
               errCode === "invalid_api_key" ||
@@ -123,13 +145,17 @@ export class GroqManager {
               errMsg.includes("max_tokens exceeds");
 
             if (isFatalRequest) {
-              throw new Error(
-                "AI request configuration error. Please contact support."
-              );
+              throw new Error("AI request configuration error. Please contact support.");
             }
 
-            // Model-specific incompatibility (output contract mismatch) — try next
+            // Model-specific incompatibility — skip to next model
             break;
+          }
+
+          // ── 401/403 — authentication failure — throw immediately ───────
+          if (response.status === 401 || response.status === 403) {
+            _logModelEvent(model, response.status, "auth_error", "authorization failed");
+            throw new Error("AI service authorization failed. Please contact support.");
           }
 
           // ── Other non-2xx — retry once then move to next model ────────
@@ -221,43 +247,53 @@ export class GroqManager {
 
   /**
    * Safely parses JSON from an LLM response string.
-   * Applies think-tag stripping, markdown fence removal, and safe repair.
+   *
+   * Pipeline:
+   *   1. Strip <think>...</think> reasoning tags (Qwen3/DeepSeek)
+   *   2. Strip markdown code fences
+   *   3. Extract outermost { ... } object
+   *   4. Strict JSON.parse — only strip trailing commas as minimal repair
+   *   5. Throw on failure — caller must try next model
+   *
+   * NEVER: aggressive key-unquoting or field invention.
+   * If JSON cannot be parsed after minimal repair → throw, do not return partial data.
    */
   static safeParseJSON(rawText) {
     if (!rawText || typeof rawText !== "string") {
       throw new Error("Invalid or empty response to parse as JSON.");
     }
 
-    // Strip think tags first (defensive — safe even if none present)
+    // 1. Strip <think> tags (must run before JSON extraction)
     let cleaned = GroqManager._stripThinkTags(rawText).trim();
 
-    // Strip markdown code fences
+    // 2. Strip markdown code fences
     cleaned = cleaned
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/, "")
       .replace(/\s*```$/, "");
 
+    // 3. Find outermost JSON object
     const firstBrace = cleaned.indexOf("{");
     const lastBrace  = cleaned.lastIndexOf("}");
 
     if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-      throw new Error("No structured JSON object found in AI response.");
+      throw new Error("No JSON object found in model output.");
     }
 
     const jsonSub = cleaned.slice(firstBrace, lastBrace + 1);
 
+    // 4. Strict parse — only minimal trailing-comma repair
+    //    Do NOT unquote keys or invent missing fields.
     try {
       return JSON.parse(jsonSub);
     } catch {
-      // Attempt minimal repair: trailing commas, unquoted keys
-      const repaired = jsonSub
-        .replace(/,\s*([}\]])/g, "$1")
-        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
-
+      // One repair pass: trailing commas before } or ] only
+      const minimal = jsonSub.replace(/,\s*([}\]])/g, "$1");
       try {
-        return JSON.parse(repaired);
+        return JSON.parse(minimal);
       } catch {
-        throw new Error("AI returned malformed JSON that could not be repaired safely.");
+        // Cannot parse — caller must treat as model failure and try next
+        throw new Error("Model returned malformed JSON — cannot parse safely.");
       }
     }
   }

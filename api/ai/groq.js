@@ -8,20 +8,24 @@
 // 4. Validates request structure, roles, and model whitelisting.
 // 5. Enforces total payload and token limits to prevent prompt-flooding / DoS.
 
-// ALLOWED_MODELS — verified live against Groq API 2026-09-09.
-// Benchmark: 4-point FIR JSON extraction score (name, phone, items, no-fabricate).
-// Re-run api/ai/audit_groq_models.cjs before adding new models.
+// ALLOWED_MODELS — 16-case FIR benchmark (2026-09-09).
+// Re-run benchmark_fir_extraction.cjs before adding models.
+//
+// Model                 Score   Lat(avg)  JSON mode  Notes
+// openai/gpt-oss-20b   15/16   1204ms    SUPPORTED  PRIMARY
+// openai/gpt-oss-120b  16/16   2186ms    NOT SUPP   FALLBACK1 (perfect, no JSON mode)
+// qwen/qwen3.8-27b     11/16    732ms    SUPPORTED  FALLBACK2 (rate-limited in bench)
+//
+// EXCLUDED (do not add without re-running benchmark):
+//   groq/compound-mini  → no tool/web-search contract in this app
+//   qwen/qwen3.6-27b    → <think> tags corrupt JSON
+//   allam-2-7b          → invalid JSON output
+//   groq/compound       → agentic routing model
+//   llama-*/mixtral-*   → NOT in this API key's plan
 const ALLOWED_MODELS = new Set([
-  "qwen/qwen3.8-27b",     // PRIMARY  — score=4/4, latency~1025ms, no think-tags
-  "openai/gpt-oss-20b",   // FALLBACK1 — score=4/4, latency~2262ms
-  "openai/gpt-oss-120b",  // FALLBACK2 — score=4/4, latency~2258ms, highest quality
-  "groq/compound-mini",   // FALLBACK3 — score=4/4, latency~3245ms, last resort
-  // EXCLUDED — do not add without re-running benchmarks:
-  // qwen/qwen3.6-27b  → emits <think> tags that corrupt JSON (score 1/4)
-  // allam-2-7b        → invalid JSON for FIR extraction (score 1/4)
-  // groq/compound     → redundant with compound-mini; slower
-  // llama-3.3-70b-versatile, llama-3.1-70b-versatile,
-  // mixtral-8x7b-32768, llama-3.1-8b-instant → NOT in this API key's plan
+  "openai/gpt-oss-20b",   // PRIMARY   — 15/16, 1204ms avg
+  "openai/gpt-oss-120b",  // FALLBACK1 — 16/16, 2186ms avg, highest reliability
+  "qwen/qwen3.8-27b",     // FALLBACK2 — 11/16 bench (rate-limited), 732ms, last resort
 ]);
 
 const ALLOWED_ROLES = new Set(["system", "user", "assistant"]);
@@ -126,7 +130,7 @@ export default async function handler(req, res) {
   }
 
   // Whitelist Model Selection — default to PRIMARY if client sends unknown model
-  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "qwen/qwen3.8-27b";
+  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "openai/gpt-oss-20b";
 
   // Bound Parameters
   const clampedTokens = Math.min(Math.max(parseInt(maxTokens, 10) || 1200, 1), MAX_TOKENS_CEILING);

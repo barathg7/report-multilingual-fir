@@ -9,6 +9,12 @@
 // 5. Enforces total payload and token limits to prevent prompt-flooding / DoS.
 
 const ALLOWED_MODELS = new Set([
+  "groq/compound-mini",
+  "groq/compound",
+  "qwen/qwen3.6-27b",
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-20b",
+  "openai/gpt-oss-120b",
   "llama-3.3-70b-versatile",
   "llama-3.1-70b-versatile",
   "mixtral-8x7b-32768",
@@ -117,7 +123,7 @@ export default async function handler(req, res) {
   }
 
   // Whitelist Model Selection
-  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "llama-3.3-70b-versatile";
+  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "groq/compound-mini";
 
   // Bound Parameters
   const clampedTokens = Math.min(Math.max(parseInt(maxTokens, 10) || 1200, 1), MAX_TOKENS_CEILING);

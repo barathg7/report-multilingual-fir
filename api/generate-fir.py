@@ -369,7 +369,11 @@ def generate_fir(data):
     tpath    = os.path.join(tdir, template)
 
     if not os.path.exists(tpath):
-        raise FileNotFoundError(f"Template not found: {tpath}")
+        return {
+            'success': False,
+            'useClientFallback': True,
+            'message': f"Template {template} not stored on server. Client-side firDocxGenerator generates the complete official FIR DOCX."
+        }
 
     # Enrich timestamps
     now = datetime.datetime.now()

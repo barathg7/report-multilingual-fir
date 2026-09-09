@@ -18,11 +18,12 @@ const GROQ_PROXY_URL = "/api/ai/groq";
 export class GroqManager {
   constructor() {
     // No API key stored client-side. All auth handled server-side.
-    this.primaryModel = "llama-3.3-70b-versatile";
+    this.primaryModel = "groq/compound-mini";
     this.backupModels = [
-      "llama-3.1-70b-versatile",
-      "mixtral-8x7b-32768",
-      "gemma-2-9b-it",
+      "groq/compound",
+      "qwen/qwen3.6-27b",
+      "qwen/qwen3.8-27b",
+      "llama-3.3-70b-versatile",
     ];
   }
 
@@ -130,6 +131,13 @@ export class GroqManager {
         throw new Error("AI returned malformed JSON that could not be repaired safely.");
       }
     }
+  }
+
+  /**
+   * Instance helper that delegates to safeParseJSON
+   */
+  safeExtractJSON(rawText) {
+    return GroqManager.safeParseJSON(rawText);
   }
 }
 

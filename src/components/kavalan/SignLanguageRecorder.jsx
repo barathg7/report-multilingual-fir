@@ -1,0 +1,187 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Hand, Camera, CameraOff, AlertTriangle, CheckCircle, X, Edit3, Trash2, Info } from 'lucide-react';
+
+async function requestCameraStream() {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access is not supported in this browser.');
+  return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+}
+function stopStream(s) { if (s) s.getTracks().forEach(t => t.stop()); }
+
+/**
+ * SignLanguageRecorder — Accessibility input for deaf/HoH citizens.
+ *
+ * CRITICAL: No sign-language recognition model is available in this project.
+ * This component is HONEST about that. Zero fabricated output.
+ * Citizens type their own statement; an interpreter may assist.
+ *
+ * Provenance: source = 'sign_language_manual', editedByUser = true
+ */
+export default function SignLanguageRecorder({ onConfirm, onCancel, existingText = '' }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [cameraState, setCameraState] = useState('idle');
+  const [cameraError, setCameraError] = useState('');
+  const [draftText, setDraftText] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [mergeMode, setMergeMode] = useState('append');
+
+  const startCamera = useCallback(async () => {
+    setCameraState('requesting'); setCameraError('');
+    try {
+      const stream = await requestCameraStream();
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
+      setCameraState('active');
+    } catch (err) {
+      const denied = ['NotAllowedError', 'PermissionDeniedError'].includes(err.name);
+      setCameraState(denied ? 'denied' : 'error');
+      setCameraError(denied ? 'Camera permission was denied. Allow it in browser settings and try again.' : err.message || 'Could not access camera.');
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    stopStream(streamRef.current); streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraState('idle');
+  }, []);
+
+  useEffect(() => () => stopStream(streamRef.current), []);
+
+  const handleConfirm = () => {
+    const trimmed = draftText.trim(); if (!trimmed) return;
+    const provenance = { source: 'sign_language_manual', confidence: 1.0, editedByUser: true, verified: false, lastUpdated: new Date().toISOString() };
+    const finalText = (existingText && mergeMode === 'append') ? existingText.trim() + '\n\n' + trimmed : trimmed;
+    setConfirmed(true);
+    setTimeout(() => { stopCamera(); onConfirm({ text: finalText, provenance }); }, 600);
+  };
+
+  const handleCancel = () => { stopCamera(); onCancel?.(); };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm" role="region" aria-label="Sign Language Input">
+      <div className="flex items-center justify-between px-4 py-3 bg-indigo-700 text-white">
+        <div className="flex items-center gap-2">
+          <Hand className="h-5 w-5" aria-hidden="true" />
+          <span className="font-bold text-sm">Sign Language Input</span>
+        </div>
+        <button type="button" onClick={handleCancel} aria-label="Close sign language recorder"
+          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="p-4 space-y-4">
+        {/* Honest model-unavailable notice — required by anti-fabrication rule */}
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5" role="status">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-bold text-amber-800">Automatic recognition is not currently available</p>
+            <p className="text-xs text-amber-700 mt-1 leading-snug">
+              Sign-language recognition model/provider is not integrated in this project.
+              No automatic translation will occur. Use the camera preview as a visual aid
+              while typing — or ask an interpreter to assist you.
+            </p>
+          </div>
+        </div>
+
+        {/* Camera section */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Camera className="h-3.5 w-3.5" aria-hidden="true" /> Camera Preview (optional)
+            </p>
+            {cameraState === 'active'
+              ? <button type="button" onClick={stopCamera} aria-label="Stop camera"
+                  className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 transition">
+                  <CameraOff className="h-3.5 w-3.5" /> Stop Camera
+                </button>
+              : <button type="button" onClick={startCamera} disabled={cameraState === 'requesting'} aria-label="Start camera preview"
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1 transition disabled:opacity-50">
+                  <Camera className="h-3.5 w-3.5" />{cameraState === 'requesting' ? 'Requesting...' : 'Start Camera'}
+                </button>}
+          </div>
+          <div
+            className={`relative rounded-xl overflow-hidden bg-gray-900 ${cameraState === 'active' ? 'aspect-video' : 'h-24'} flex items-center justify-center`}
+            aria-label="Camera preview area">
+            <video ref={videoRef} muted playsInline
+              className={`w-full h-full object-cover ${cameraState === 'active' ? 'block' : 'hidden'}`}
+              aria-label="Live camera preview" />
+            {cameraState !== 'active' && (
+              <div className="flex flex-col items-center gap-2 text-gray-500">
+                <CameraOff className="h-6 w-6" aria-hidden="true" />
+                <p className="text-xs">
+                  {cameraState === 'idle' && 'Camera off — click Start Camera to enable'}
+                  {cameraState === 'requesting' && 'Requesting camera access...'}
+                  {cameraState === 'denied' && 'Camera access denied'}
+                  {cameraState === 'error' && 'Camera unavailable'}
+                </p>
+              </div>
+            )}
+          </div>
+          {cameraError && (
+            <p className="text-xs text-rose-600 mt-1.5 flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />{cameraError}
+            </p>
+          )}
+        </div>
+
+        {/* Merge mode — only shown if existing statement text exists */}
+        {existingText && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <p className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1.5">
+              <Info className="h-3.5 w-3.5" aria-hidden="true" /> Existing statement found
+            </p>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="sign_merge_mode" value="append" checked={mergeMode === 'append'} onChange={() => setMergeMode('append')} className="accent-indigo-600" />
+                <span className="text-xs text-blue-800">Add after existing text</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="sign_merge_mode" value="replace" checked={mergeMode === 'replace'} onChange={() => setMergeMode('replace')} className="accent-rose-600" />
+                <span className="text-xs text-rose-700">Replace existing text</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Manual text entry */}
+        <div>
+          <label htmlFor="sign-stmt" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+            Your Statement
+            <span className="text-gray-400 font-normal normal-case tracking-normal ml-1">(type or dictate to an interpreter)</span>
+          </label>
+          <textarea
+            id="sign-stmt"
+            value={draftText}
+            onChange={e => setDraftText(e.target.value)}
+            placeholder="Type your statement here. An interpreter may assist you."
+            rows={5}
+            aria-label="Statement text area"
+            aria-describedby="sign-stmt-help"
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          />
+          <p id="sign-stmt-help" className="text-[11px] text-gray-400 mt-1">Only text you confirm here will be added to your FIR.</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setDraftText('')} disabled={!draftText} aria-label="Clear text"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs font-semibold transition disabled:opacity-40">
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Clear
+          </button>
+          <button type="button" onClick={handleConfirm} disabled={!draftText.trim() || confirmed} aria-label="Confirm and add to statement"
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm transition disabled:opacity-50 shadow-sm">
+            {confirmed
+              ? <><CheckCircle className="h-4 w-4" aria-hidden="true" /> Added to Statement</>
+              : <><Edit3 className="h-4 w-4" aria-hidden="true" /> Confirm &amp; Add to Statement</>}
+          </button>
+        </div>
+
+        <p className="text-[10px] text-gray-400 border-t border-gray-100 pt-3 leading-relaxed">
+          Text added via this method is marked{' '}
+          <code className="bg-gray-100 px-1 rounded text-gray-600">sign_language_manual</code>{' '}
+          in the FIR provenance record.
+        </p>
+      </div>
+    </div>
+  );
+}

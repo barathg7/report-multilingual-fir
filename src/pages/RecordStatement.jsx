@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mic, User, Shield, MapPin, Camera, CheckCircle, FileText } from "lucide-react";
+import { Mic, User, Shield, MapPin, Camera, CheckCircle, FileText, Keyboard, Hand } from "lucide-react";
 import StepBar from "@/components/ui/StepBar";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import Select from "@/components/ui/Select";
 import VoiceRecorder from "@/components/kavalan/VoiceRecorder";
+import SignLanguageRecorder from "@/components/kavalan/SignLanguageRecorder";
 import LocationCapture from "@/components/kavalan/LocationCapture";
 import PhotoUpload from "@/components/kavalan/PhotoUpload";
 import SuspectSketch from "@/components/kavalan/SuspectSketch";
@@ -141,6 +142,8 @@ export default function RecordStatement() {
   const [declarationAgreed, setDeclarationAgreed] = useState(false);
   const [ipcInput, setIpcInput]     = useState("");
   const [ipcValidation, setIpcValidation] = useState(null);
+  // Input mode for Step 1: voice | type | sign
+  const [inputMode, setInputMode]   = useState("voice");
 
   // Ref stores the latest extracted data synchronously — avoids stale closure issues
   const extractedRef = useRef(null);
@@ -397,8 +400,32 @@ export default function RecordStatement() {
     setPhotos([]); setSketch(null); setFirData(null);
     setForm(EMPTY_FORM); setIpcValidation(null);
     setSignature(null); setDeclarationAgreed(false);
+    setInputMode("voice");
     extractedRef.current = null;
   };
+
+  // ── Sign Language confirmed text handler ────────────────────────────────────
+  // Mirrors the data-integrity rules of handleVoiceComplete:
+  //  - editedByUser fields are never overwritten
+  //  - only sets incidentDescription if not already user-edited
+  //  - provenance is sign_language_manual
+  const handleSignConfirm = useCallback(({ text, provenance }) => {
+    if (!text?.trim()) return;
+    setTranscript(prev => prev ? prev + "\n\n" + text.trim() : text.trim());
+    setForm(prev => {
+      const prov = { ...provenanceRef.current };
+      // Only set description if not already edited by user
+      if (!prov.incidentDescription?.editedByUser) {
+        const meta = { ...provenance, lastUpdated: new Date().toISOString() };
+        prov.incidentDescription = meta;
+        provenanceRef.current.incidentDescription = meta;
+        setProvenance(p => ({ ...p, incidentDescription: meta }));
+        return { ...prev, incidentDescription: text.trim() };
+      }
+      return prev;
+    });
+    setInputMode("voice"); // Return to voice mode after confirmation
+  }, []);
 
   const filteredLangs = LANGUAGES.filter(l =>
     l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
@@ -492,38 +519,106 @@ export default function RecordStatement() {
       </div>
     );
 
-    /* STEP 1 — Voice Recording */
+    /* STEP 1 — Statement Input */
     if (step === 1) return (
       <div className="space-y-4">
-        {/* Accessible Language Banner with 1-click Change */}
-        <div className="flex items-center justify-between bg-blue-50/90 border border-blue-200 rounded-xl px-4 py-3 shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{lang?.flag || "🌐"}</span>
-            <div>
-              <p className="text-[11px] text-blue-600 font-bold uppercase tracking-wider">Statement Language</p>
-              <p className="text-sm font-bold text-blue-950">
-                {lang?.native || "English"} <span className="text-blue-700 font-medium">({lang?.name || "English"})</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setStep(0)}
-            className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100/70 px-3 py-1.5 rounded-xl border border-blue-300 shadow-xs transition active:scale-95"
-            title="Wrong language selected? Click to switch"
-          >
-            Wrong language? Change
-          </button>
-        </div>
 
+        {/* Heading */}
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900">Record Your Statement</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Speak in <strong>{lang?.native}</strong> — AI extracts all details automatically
+            Speak in <strong>{lang?.native}</strong> — or choose another input method
           </p>
         </div>
 
-        <VoiceRecorder language={lang} onComplete={handleVoiceComplete} />
+        {/* ── Input Mode Switcher ── */}
+        <div
+          role="group"
+          aria-label="Choose statement input method"
+          className="flex gap-2 p-1 bg-gray-100 rounded-xl"
+        >
+          <button
+            type="button"
+            id="input-mode-voice"
+            onClick={() => setInputMode("voice")}
+            aria-pressed={inputMode === "voice"}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
+              inputMode === "voice"
+                ? "bg-white shadow-sm text-blue-700 border border-blue-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Mic className="h-4 w-4" aria-hidden="true" />
+            <span>Voice</span>
+          </button>
+          <button
+            type="button"
+            id="input-mode-type"
+            onClick={() => setInputMode("type")}
+            aria-pressed={inputMode === "type"}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
+              inputMode === "type"
+                ? "bg-white shadow-sm text-blue-700 border border-blue-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Keyboard className="h-4 w-4" aria-hidden="true" />
+            <span>Type</span>
+          </button>
+          <button
+            type="button"
+            id="input-mode-sign"
+            onClick={() => setInputMode("sign")}
+            aria-pressed={inputMode === "sign"}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
+              inputMode === "sign"
+                ? "bg-white shadow-sm text-indigo-700 border border-indigo-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Hand className="h-4 w-4" aria-hidden="true" />
+            <span>Sign Language</span>
+          </button>
+        </div>
+
+        {/* ── Voice mode ── */}
+        {inputMode === "voice" && <VoiceRecorder language={lang} onComplete={handleVoiceComplete} />}
+
+        {/* ── Type mode ── */}
+        {inputMode === "type" && (
+          <div className="space-y-3">
+            <label htmlFor="type-statement" className="block text-sm font-semibold text-gray-700">
+              Type Your Statement
+            </label>
+            <Textarea
+              id="type-statement"
+              value={form.incidentDescription}
+              onChange={e => {
+                autoSuggest(e.target.value);
+                // Mark as user-edited so it won't be overwritten by AI extraction
+                const meta = {
+                  source: "USER", confidence: 1.0, editedByUser: true,
+                  verified: false, lastUpdated: new Date().toISOString(),
+                };
+                provenanceRef.current.incidentDescription = meta;
+                setProvenance(p => ({ ...p, incidentDescription: meta }));
+              }}
+              rows={8}
+              placeholder={`Type your statement in ${lang?.native || "your language"}...`}
+              aria-label="Type your statement"
+            />
+            <p className="text-xs text-gray-400">Text typed here is saved directly to the FIR.</p>
+          </div>
+        )}
+
+        {/* ── Sign Language mode ── */}
+        {inputMode === "sign" && (
+          <SignLanguageRecorder
+            existingText={form.incidentDescription}
+            onConfirm={handleSignConfirm}
+            onCancel={() => setInputMode("voice")}
+          />
+        )}
 
         {/* Live preview of extracted data
             CHANGED: use formatDateForDisplay / formatTimeForDisplay so the

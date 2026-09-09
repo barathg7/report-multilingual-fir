@@ -537,9 +537,23 @@ export default function PoliceDashboard() {
       })
       .subscribe();
 
+    // ── Reactive auth state listener ──────────────────────────────────────────
+    // Handles token expiry, parallel-tab sign-out, and any other Supabase Auth
+    // events that should invalidate the current police session.
+    // Authorization is NEVER derived from this event alone — the DB check in
+    // getAuthenticatedStation() remains the authoritative source on next load.
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (event === "SIGNED_OUT" && active) {
+          navigate("/police-login", { replace: true });
+        }
+      }
+    );
+
     return () => {
       active = false;
       supabase.removeChannel(channel);
+      authListener.unsubscribe();
     };
   }, [navigate]);
 

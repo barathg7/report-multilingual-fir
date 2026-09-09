@@ -8,14 +8,20 @@
 // 4. Validates request structure, roles, and model whitelisting.
 // 5. Enforces total payload and token limits to prevent prompt-flooding / DoS.
 
+// ALLOWED_MODELS — verified live against Groq API 2026-09-09.
+// Benchmark: 4-point FIR JSON extraction score (name, phone, items, no-fabricate).
+// Re-run api/ai/audit_groq_models.cjs before adding new models.
 const ALLOWED_MODELS = new Set([
-  "llama-3.3-70b-versatile",
-  "llama-3.1-70b-versatile",
-  "llama-3.1-8b-instant",
-  "mixtral-8x7b-32768",
-  // groq/compound-*, qwen/*, openai/gpt-oss-* intentionally excluded:
-  // those models use tool-call contracts and return empty text, causing
-  // Groq's "model output must contain either output text or tool calls" error.
+  "qwen/qwen3.8-27b",     // PRIMARY  — score=4/4, latency~1025ms, no think-tags
+  "openai/gpt-oss-20b",   // FALLBACK1 — score=4/4, latency~2262ms
+  "openai/gpt-oss-120b",  // FALLBACK2 — score=4/4, latency~2258ms, highest quality
+  "groq/compound-mini",   // FALLBACK3 — score=4/4, latency~3245ms, last resort
+  // EXCLUDED — do not add without re-running benchmarks:
+  // qwen/qwen3.6-27b  → emits <think> tags that corrupt JSON (score 1/4)
+  // allam-2-7b        → invalid JSON for FIR extraction (score 1/4)
+  // groq/compound     → redundant with compound-mini; slower
+  // llama-3.3-70b-versatile, llama-3.1-70b-versatile,
+  // mixtral-8x7b-32768, llama-3.1-8b-instant → NOT in this API key's plan
 ]);
 
 const ALLOWED_ROLES = new Set(["system", "user", "assistant"]);
@@ -119,8 +125,8 @@ export default async function handler(req, res) {
     });
   }
 
-  // Whitelist Model Selection
-  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "llama-3.3-70b-versatile";
+  // Whitelist Model Selection — default to PRIMARY if client sends unknown model
+  const model = ALLOWED_MODELS.has(requestedModel) ? requestedModel : "qwen/qwen3.8-27b";
 
   // Bound Parameters
   const clampedTokens = Math.min(Math.max(parseInt(maxTokens, 10) || 1200, 1), MAX_TOKENS_CEILING);

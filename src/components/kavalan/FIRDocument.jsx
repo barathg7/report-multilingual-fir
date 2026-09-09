@@ -40,7 +40,7 @@ export default function FIRDocument({ fir, officerName = "Inspector", onAllSigne
           <p className="text-xs opacity-75 mt-0.5">முதல் தகவல் அறிக்கை (தமிழ்நாடு காவல்துறை)</p>
           <div className="inline-flex items-center gap-2 mt-3 bg-white/20 rounded-full px-4 py-1.5">
             <Shield className="h-4 w-4" />
-            <span className="font-mono text-sm font-bold">{fir?.id || "FIR/TN001/2026/0001"}</span>
+            <span className="font-mono text-sm font-bold">{fir?.officialFIRNo || fir?.submissionId || fir?.id}</span>
           </div>
         </div>
 
@@ -49,6 +49,8 @@ export default function FIRDocument({ fir, officerName = "Inspector", onAllSigne
           {/* Station & Dates */}
           <Section title="FIR Details" titleTa="புகார் விவரங்கள்">
             <div className="grid grid-cols-1 gap-0">
+              <Field label="Official FIR No" value={fir?.officialFIRNo} />
+              <Field label="Acknowledgment / Ref ID" value={fir?.submissionId || fir?.id} />
               <Field label="Police Station" value={fir?.stationName || "Chennai Central PS"} />
               <Field label="Investigating Officer" value={officerName} />
               <Field label="Date of Report" value={fir?.createdAt

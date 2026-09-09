@@ -1,33 +1,32 @@
 /**
  * src/components/kavalan/GroqManager.jsx — Resilient Groq Client for REPORT v2
- * 
+ *
+ * SECURITY (Phase 1.1):
+ * - NO LONGER reads VITE_GROQ_API_KEY or any client-side API key.
+ * - All Groq calls are proxied through /api/ai/groq (server-side).
+ *   In dev: Vite middleware reads process.env.GROQ_API_KEY (no VITE_ prefix).
+ *   In production: Supabase Edge Function at /functions/v1/ai-proxy holds the key.
+ *
  * Strict rules:
- * 1. NEVER fabricate fake FIR data (e.g. Priya at Phoenix Mall).
+ * 1. NEVER fabricate fake FIR data.
  * 2. Robust JSON extraction with safe repair.
- * 3. Clear timeout and fallback handling so failures never crash the UI.
+ * 3. Clear error handling — failures never crash the UI or invent facts.
  */
 
+const GROQ_PROXY_URL = "/api/ai/groq";
+
 export class GroqManager {
-  constructor(apiKey) {
-    this.apiKey = apiKey ? apiKey.trim() : "";
+  constructor() {
+    // No API key stored client-side. All auth handled server-side.
     this.primaryModel = "llama-3.3-70b-versatile";
     this.backupModels = [
       "llama-3.1-70b-versatile",
       "mixtral-8x7b-32768",
-      "gemma-2-9b-it"
+      "gemma-2-9b-it",
     ];
-    this.baseURL = "https://api.groq.com/openai/v1/chat/completions";
-  }
-
-  hasValidKey() {
-    return Boolean(this.apiKey && this.apiKey.length > 5);
   }
 
   async chat(messages, maxTokens = 1200, temperature = 0.1, timeoutMs = 25000) {
-    if (!this.hasValidKey()) {
-      throw new Error("AI service is not configured (API key missing). You can continue entering details manually.");
-    }
-
     const models = [this.primaryModel, ...this.backupModels];
     let lastError = null;
 
@@ -37,18 +36,10 @@ export class GroqManager {
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         try {
-          const response = await fetch(this.baseURL, {
+          const response = await fetch(GROQ_PROXY_URL, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${this.apiKey}`,
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: messages,
-              max_tokens: maxTokens,
-              temperature: temperature,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model, messages, maxTokens, temperature }),
             signal: controller.signal,
           });
 
@@ -59,9 +50,17 @@ export class GroqManager {
             break; // Try next model
           }
 
+          if (response.status === 503) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(
+              errData.message ||
+                "AI service is not configured on the server. Set GROQ_API_KEY (without VITE_ prefix) in your server environment."
+            );
+          }
+
           if (!response.ok) {
             const errorText = await response.text().catch(() => "");
-            throw new Error(`AI service returned HTTP ${response.status}: ${errorText.slice(0, 120)}`);
+            throw new Error(`AI proxy returned HTTP ${response.status}: ${errorText.slice(0, 120)}`);
           }
 
           const data = await response.json();
@@ -82,7 +81,6 @@ export class GroqManager {
             break; // Try next model
           }
 
-          // Backoff before retrying same model
           if (attempt < 1) {
             await new Promise((r) => setTimeout(r, 1000));
           }
@@ -90,9 +88,11 @@ export class GroqManager {
       }
     }
 
-    // All models failed — throw honest error without fabricating data
+    // All models failed — honest error, no fabricated data
     const reason = lastError?.message || "All AI models were unreachable";
-    throw new Error(`We couldn't analyze the recording (${reason}). Your transcript is preserved. You can edit the details directly.`);
+    throw new Error(
+      `We couldn't analyse the recording (${reason}). Your transcript is preserved. You can edit the details directly.`
+    );
   }
 
   /**
@@ -105,11 +105,8 @@ export class GroqManager {
     }
 
     let cleaned = rawText.trim();
-
-    // 1. Remove markdown backticks if present
     cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
 
-    // 2. Locate first '{' and last '}'
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
 
@@ -119,14 +116,12 @@ export class GroqManager {
 
     const jsonSub = cleaned.slice(firstBrace, lastBrace + 1);
 
-    // 3. First try: standard parse
     try {
       return JSON.parse(jsonSub);
     } catch (err1) {
-      // 4. Safe repair: remove trailing commas before closing braces/brackets
       const repaired = jsonSub
         .replace(/,\s*([}\]])/g, "$1")
-        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":'); // ensure quotes on keys
+        .replace(/(['\"])?([a-zA-Z0-9_]+)(['\"])?:/g, '"$2":');
 
       try {
         return JSON.parse(repaired);
@@ -138,4 +133,4 @@ export class GroqManager {
   }
 }
 
-export default GroqManager;
+export default GroqManager;

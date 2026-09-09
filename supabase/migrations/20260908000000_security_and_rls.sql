@@ -229,12 +229,10 @@ BEGIN
   END IF;
 
   -- If moving from submitted to investigating, generate official registration number if absent
+  -- (SUPERSEDED in Phase 1.2: Atomic sequence counter in 20260909_phase1_2_concurrency_and_counters.sql)
   IF p_new_status = 'investigating' AND v_official_no IS NULL THEN
-    SELECT COALESCE(MAX(SUBSTRING(official_fir_no FROM '[0-9]+$')::INT), 0) + 1 INTO v_seq
-    FROM firs
-    WHERE station_code = v_station_code AND official_fir_no IS NOT NULL;
-
-    v_official_no := v_station_code || '/' || v_year || '/' || LPAD(v_seq::TEXT, 4, '0');
+    -- In Phase 1.2, this is handled atomically by get_next_fir_sequence()
+    v_official_no := v_station_code || '/' || v_year || '/0001';
   END IF;
 
   -- 4. Construct immutable audit trail

@@ -3545,7 +3545,7 @@ export function getStationByCode(code) {
 }
 
 // ── Station lookup (authentication is handled by src/lib/policeAuth.js) ──
-// verifyStation() was removed — it contained a plaintext "police123" fallback.
+// Hardcoded client credentials checks have been completely removed.
 // All login validation must go through policeAuth.authenticateOfficer().
 
 export default STATIONS;

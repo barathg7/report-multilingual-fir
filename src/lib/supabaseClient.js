@@ -86,57 +86,75 @@ export async function getFIRsForStation(stationCode) {
 
 // ── Secure FIR Status Mutation via RPC ───────────────────────────────────────
 /**
- * Executes a server-guarded FIR status update.
- * Prevents arbitrary status alterations (e.g. fake_fir, resolved) without officer authorization.
+ * Executes a server-guarded FIR status update via the update_fir_status_secure RPC.
+ *
+ * SECURITY (Phase 1.1):
+ * - Authorization is derived server-side: auth.uid() -> police_officers table.
+ * - The direct .update() fallback has been REMOVED. This function FAILS CLOSED.
+ * - If the RPC is unavailable (migration not applied), a clear error is thrown.
+ *   Do not attempt a direct .update() to work around this.
  */
-export async function updateFIRStatusSecure(firId, newStatus, officerNotes = "", badgeNumber = "") {
+export async function updateFIRStatusSecure(firId, newStatus, officerNotes = "") {
   if (!firId || !newStatus) {
     throw new Error("FIR ID and new status are required.");
   }
 
-  // 1. First attempt secure database RPC
-  try {
-    const { data, error } = await supabase.rpc("update_fir_status_secure", {
-      p_fir_id: firId,
-      p_new_status: newStatus,
-      p_officer_notes: officerNotes,
-      p_officer_badge: badgeNumber,
-    });
+  const { data, error } = await supabase.rpc("update_fir_status_secure", {
+    p_fir_id: firId,
+    p_new_status: newStatus,
+    p_officer_notes: officerNotes,
+    // p_officer_badge intentionally omitted — server fetches it from police_officers table
+  });
 
-    if (!error && data?.success) {
-      return data;
+  if (error) {
+    // Propagate server error directly (includes auth denied, illegal transition, FIR not found)
+    if (error.message?.includes("does not exist") || error.message?.includes("404")) {
+      throw new Error(
+        "Status update failed: The secure RPC function is not installed on this Supabase instance. " +
+        "Run supabase/migrations/20260908_phase1_1_security_rpc_v2.sql on your database before using the police portal."
+      );
     }
-
-    if (error && !error.message?.includes("function update_fir_status_secure") && !error.message?.includes("not found")) {
-      // If server explicitly denied transition or unauthorized
-      throw new Error(error.message);
-    }
-  } catch (rpcErr) {
-    // If function does not exist yet on remote instance (prior to migration run), perform guarded fallback
-    if (!rpcErr.message?.includes("does not exist") && !rpcErr.message?.includes("404")) {
-      throw rpcErr;
-    }
+    throw new Error(error.message || "Status update failed");
   }
 
-  // 2. Direct update fallback (only works if RLS allows authenticated officer)
-  const { error: directError } = await supabase
-    .from("firs")
-    .update({
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", firId);
-
-  if (directError) {
-    throw new Error(`Status update failed: ${directError.message}`);
+  if (!data?.success) {
+    throw new Error("Status update RPC returned unexpected response.");
   }
 
-  return { success: true, firId, status: newStatus };
+  return data;
 }
 
-// Legacy alias maintained for existing code, routes to secure handler
+// Legacy alias — routes to secure handler (no direct update fallback)
 export async function updateFIRStatus(firId, newStatus) {
   return updateFIRStatusSecure(firId, newStatus);
+}
+
+/**
+ * Verifies a legal section for an FIR via the secure server RPC.
+ * Authorization is derived from auth.uid() -> police_officers on the server.
+ */
+export async function verifyLegalSectionSecure(firId, section, act = "BNS 2023") {
+  if (!firId || !section) {
+    throw new Error("FIR ID and section are required.");
+  }
+
+  const { data, error } = await supabase.rpc("verify_legal_section_secure", {
+    p_fir_id: firId,
+    p_section: section,
+    p_act: act,
+  });
+
+  if (error) {
+    if (error.message?.includes("does not exist") || error.message?.includes("404")) {
+      throw new Error(
+        "Legal verification failed: The secure RPC is not installed on this Supabase instance. " +
+        "Run supabase/migrations/20260908_phase1_1_security_rpc_v2.sql on your database."
+      );
+    }
+    throw new Error(error.message || "Legal section verification failed.");
+  }
+
+  return data;
 }
 
 // ── Citizen Receipt Lookup via Access Token ──────────────────────────────────

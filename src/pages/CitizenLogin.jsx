@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   AlertTriangle,
   RefreshCw,
+  CheckCircle,
 } from "lucide-react";
 
 const OTP_LEN    = 6;
@@ -95,9 +96,24 @@ async function sendOTPviaEmail({ name, phone, email, otp }) {
 }
 
 function DetailsStep({ onNext }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("citizen_user") || "{}");
+      return u.name || "";
+    } catch { return ""; }
+  });
+  const [phone, setPhone] = useState(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("citizen_user") || "{}");
+      return u.phone || "";
+    } catch { return ""; }
+  });
+  const [email, setEmail] = useState(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("citizen_user") || "{}");
+      return u.email || "";
+    } catch { return ""; }
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState({});
 
@@ -158,11 +174,33 @@ function DetailsStep({ onNext }) {
     }
   };
 
+  const clearSaved = () => {
+    setName("");
+    setPhone("");
+    setEmail("");
+    setErr({});
+    try {
+      localStorage.removeItem("citizen_user");
+      sessionStorage.removeItem("citizen_user");
+    } catch (_) {}
+  };
+
   return (
     <>
-      <p className="text-gray-500 text-sm text-center mb-5">
-        We’ll send a one-time password to your email to verify your identity.
-      </p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-gray-500 text-xs">
+          Verify your identity with email OTP
+        </p>
+        {(name || phone || email) && (
+          <button
+            type="button"
+            onClick={clearSaved}
+            className="text-xs text-blue-600 hover:text-blue-800 underline cursor-pointer font-medium"
+          >
+            Clear saved details
+          </button>
+        )}
+      </div>
 
       <div className="space-y-4">
         <div>
@@ -354,14 +392,15 @@ function OTPStep({ citizen, onVerified, onBack }) {
     }
 
     if (entered === citizen.otp) {
-      sessionStorage.setItem(
-        "citizen_user",
-        JSON.stringify({
-          name: citizen.name,
-          phone: citizen.phone,
-          email: citizen.email,
-        })
-      );
+      const userPayload = {
+        name: citizen.name,
+        phone: citizen.phone,
+        email: citizen.email,
+        verifiedAt: new Date().toISOString(),
+      };
+      sessionStorage.setItem("citizen_user", JSON.stringify(userPayload));
+      localStorage.setItem("citizen_user", JSON.stringify(userPayload));
+      sessionStorage.removeItem("citizen_explicit_logout");
       onVerified();
     } else {
       const newAttempts = attempts + 1;
@@ -511,6 +550,115 @@ export default function CitizenLogin() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const citizenRef = useRef(null);
+  const [autoCitizen, setAutoCitizen] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    // If citizen explicitly clicked logout, don't auto-redirect
+    const explicitLogout = sessionStorage.getItem("citizen_explicit_logout") === "true";
+    if (explicitLogout) {
+      sessionStorage.removeItem("citizen_explicit_logout");
+      if (active) setCheckingSession(false);
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("citizen_user") || sessionStorage.getItem("citizen_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u?.name && u?.phone && active) {
+          setAutoCitizen(u);
+          const timer = setTimeout(() => {
+            navigate("/home", { replace: true });
+          }, 800);
+          return () => clearTimeout(timer);
+        }
+      }
+    } catch (_) {}
+
+    if (active) setCheckingSession(false);
+    return () => { active = false; };
+  }, [navigate]);
+
+  if (checkingSession && !autoCitizen) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-6 py-12"
+        style={{
+          background:
+            "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #312e81 100%)",
+        }}
+      >
+        <div className="flex flex-col items-center gap-3 text-white">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20 shadow-lg">
+            <Shield className="h-6 w-6 text-blue-300" />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-blue-200">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
+            <span>Checking secure session...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (autoCitizen) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-6 py-12"
+        style={{
+          background:
+            "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #312e81 100%)",
+        }}
+      >
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center space-y-4">
+          <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+            <CheckCircle className="h-8 w-8" />
+          </div>
+          <div>
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
+              Verified Citizen Session
+            </span>
+            <h2 className="text-xl font-bold text-gray-900">Welcome Back</h2>
+            <p className="text-base font-semibold text-blue-700 mt-1">
+              {autoCitizen.name}
+            </p>
+            <p className="text-xs text-gray-500 font-mono mt-0.5">
+              +91 {autoCitizen.phone} · {maskEmail(autoCitizen.email)}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 py-1">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <span>Opening citizen portal automatically…</span>
+          </div>
+
+          <button
+            onClick={() => navigate("/home", { replace: true })}
+            className="w-full py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm cursor-pointer"
+          >
+            <span>Continue to Portal Now</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setAutoCitizen(null);
+              setCheckingSession(false);
+              sessionStorage.setItem("citizen_explicit_logout", "true");
+              localStorage.removeItem("citizen_user");
+              sessionStorage.removeItem("citizen_user");
+            }}
+            className="text-xs text-gray-400 hover:text-gray-600 underline cursor-pointer block w-full text-center pt-1"
+          >
+            Sign in with a different mobile number
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Mic, History, BarChart2, Shield, Wifi, WifiOff } from "lucide-react";
-import React from "react";
+import { LayoutDashboard, Mic, History, BarChart2, Shield, Wifi, WifiOff, LogOut, User } from "lucide-react";
+import React, { useState } from "react";
 
 const navItems = [
   { to: "/dashboard",        icon: LayoutDashboard, label: "Dashboard"   },
@@ -24,6 +24,21 @@ function useOnline() {
 export default function Layout() {
   const online   = useOnline();
   const navigate = useNavigate();
+
+  const [citizen, setCitizen] = useState(() => {
+    try {
+      const raw = localStorage.getItem("citizen_user") || sessionStorage.getItem("citizen_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
+  const handleCitizenLogout = () => {
+    sessionStorage.setItem("citizen_explicit_logout", "true");
+    localStorage.removeItem("citizen_user");
+    sessionStorage.removeItem("citizen_user");
+    setCitizen(null);
+    navigate("/citizen-login");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -65,6 +80,23 @@ export default function Layout() {
 
         {/* Footer */}
         <div className="p-3 border-t border-gray-100 space-y-2">
+          {citizen && (
+            <div className="px-3 py-2 bg-blue-50/80 border border-blue-200/60 rounded-xl space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Citizen</span>
+                <button
+                  onClick={handleCitizenLogout}
+                  className="inline-flex items-center gap-0.5 text-[10px] text-red-600 hover:text-red-800 font-semibold cursor-pointer"
+                  title="Log out citizen session"
+                >
+                  <LogOut className="h-2.5 w-2.5" />
+                  <span>Logout</span>
+                </button>
+              </div>
+              <p className="text-xs font-bold text-gray-800 truncate">{citizen.name}</p>
+              <p className="text-[10px] text-gray-500 font-mono">+91 {citizen.phone}</p>
+            </div>
+          )}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
             online ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
           }`}>
@@ -91,11 +123,26 @@ export default function Layout() {
             </div>
             <p className="text-sm font-bold text-blue-700">REPORT</p>
           </div>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-            online ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
-          }`}>
-            {online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {online ? "Online" : "Offline"}
+          <div className="flex items-center gap-2">
+            {citizen && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-50 text-blue-800 text-xs">
+                <User className="h-3 w-3" />
+                <span className="font-semibold max-w-[80px] truncate">{citizen.name}</span>
+                <button
+                  onClick={handleCitizenLogout}
+                  className="text-red-500 hover:text-red-700 ml-0.5"
+                  title="Logout"
+                >
+                  <LogOut className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            )}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+              online ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+            }`}>
+              {online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {online ? "Online" : "Offline"}
+            </div>
           </div>
         </header>
 

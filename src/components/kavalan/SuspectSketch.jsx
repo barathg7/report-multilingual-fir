@@ -1,18 +1,12 @@
 /**
- * SuspectSketch.jsx
+ * SuspectSketch.jsx — Suspect Face Composite Generator
  *
- * Primary:   Cloudflare Workers AI  (VITE_CF_AI_TOKEN + VITE_CF_ACCOUNT_ID)
- * Backup 1:  NVIDIA NIM SDXL        (VITE_NGC_API_KEY)
- * Backup 2:  NVIDIA NIM Flux        (VITE_NGC_FLUX_API_KEY)
- * Backup 3:  Pollinations AI        (free, no key — CORS-safe)
- * Backup 4:  Hugging Face           (free, no key — CORS-safe)
+ * Primary:   Pollinations AI (free, no key required — CORS-safe)
+ * Backup:    Hugging Face    (free, no key required — CORS-safe)
+ * Voice:     Groq extraction via /api/ai/groq server proxy (GroqManager)
  *
- * .env:
- *   VITE_CF_AI_TOKEN=cfut_xxxxxxxxxxxx
- *   VITE_CF_ACCOUNT_ID=xxxxxxxxxxxx        ← get from dash.cloudflare.com (right sidebar)
- *   VITE_NGC_API_KEY=nvapi-xxxxxxxxxxxx    (optional)
- *   VITE_NGC_FLUX_API_KEY=nvapi-xxxxxxxxxx (optional)
- *   VITE_GROQ_API_KEY=gsk_xxxxxxxxxxxxxxx
+ * SECURITY (Phase 1.1):
+ * No API keys or tokens are held client-side.
  */
 import { useState, useRef } from "react";
 import {
@@ -21,6 +15,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
+import GroqManager from "./GroqManager";
 
 // ── Cloudflare Workers AI models (text-to-image) ──────────────────────────────
 // https://developers.cloudflare.com/workers-ai/models/#text-to-image
@@ -335,46 +330,28 @@ function blobToDataUrl(blob) {
 
 // ═══════════════════════════════════════════════════════
 // Groq: Extract suspect description from voice
+// Routes via GroqManager -> /api/ai/groq server proxy (no client-side API keys)
 // ═══════════════════════════════════════════════════════
-async function extractSuspectFromVoice(rawText, languageName, apiKey) {
-  if (!apiKey?.trim()) throw new Error("VITE_GROQ_API_KEY is not set.");
-  const signal = makeTimeoutSignal(30000);
-  let res;
-  try {
-    res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 400,
-        temperature: 0.0,
-        messages: [
-          {
-            role: "system",
-            content: `You are a police forensic assistant. Extract physical suspect details from a ${languageName} voice statement.
+async function extractSuspectFromVoice(rawText, languageName, groqManager) {
+  if (!groqManager) throw new Error("AI manager is not initialized.");
+  const messages = [
+    {
+      role: "system",
+      content: `You are a police forensic assistant. Extract physical suspect details from a ${languageName} voice statement.
 Extract: gender, age, height, build, skin tone, face shape, hair (length/style/color), facial hair, eyes, nose, distinguishing features (scars/tattoos/marks), clothing.
 Return ONLY raw JSON (no markdown):
 {"sketchDescription":"2-3 sentence English description for sketch artist","gender":"","age":"","height":"","build":"","skinTone":"","hair":"","facialHair":"","distinguishingFeatures":"","clothing":"","summary":"One-line summary"}`,
-          },
-          {
-            role: "user",
-            content: `Extract suspect from this ${languageName} statement:\n\n"${rawText}"\n\nReturn only JSON.`,
-          },
-        ],
-      }),
-      signal,
-    });
-  } finally {
-    signal._clearTimer?.();
-  }
-  if (!res.ok) throw new Error(`Groq API error ${res.status}`);
-  const data    = await res.json();
-  const raw     = data.choices?.[0]?.message?.content || "{}";
-  const cleaned = raw.replace(/```json|```/gi, "").trim();
-  const match   = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON in Groq response");
-  return JSON.parse(match[0]);
+    },
+    {
+      role: "user",
+      content: `Extract suspect from this ${languageName} statement:\n\n"${rawText}"\n\nReturn only JSON.`,
+    },
+  ];
+
+  const content = await groqManager.chat(messages, 400, 0.0);
+  return groqManager.safeExtractJSON(content);
 }
+
 
 // ═══════════════════════════════════════════════════════
 // Voice capture hook
@@ -440,13 +417,13 @@ function useVoiceCapture(language) {
 
 // ═══════════════════════════════════════════════════════
 // Main Component
+// SECURITY (Phase 1.1): All VITE_ API keys removed.
+// CF_AI, NGC, GROQ keys are NOT held client-side.
+// Sketch generation uses Pollinations AI (keyless) and Hugging Face (keyless).
+// Voice suspect extraction uses the /api/ai/groq server proxy via GroqManager.
 // ═══════════════════════════════════════════════════════
 export default function SuspectSketch({ onSketchGenerated, initialDescription = "", language = null }) {
-  const CF_TOKEN      = import.meta.env.VITE_CF_AI_TOKEN      || "";
-  const CF_ACCOUNT    = import.meta.env.VITE_CF_ACCOUNT_ID    || "";
-  const NGC_KEY       = import.meta.env.VITE_NGC_API_KEY      || "";
-  const NGC_FLUX_KEY  = import.meta.env.VITE_NGC_FLUX_API_KEY || "";
-  const GROQ_KEY      = import.meta.env.VITE_GROQ_API_KEY     || "";
+  // No client-side API keys. Privileged keys must live server-side.
 
   const [description,      setDescription]     = useState(initialDescription);
   const [sketchUrl,        setSketchUrl]        = useState(null);
@@ -459,13 +436,15 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
   const [extractedDetails, setExtractedDetails] = useState(null);
 
   const suspectVoice = useVoiceCapture(language);
+  // GroqManager routes through /api/ai/groq server proxy
+  const groqManager = useRef(new GroqManager());
 
   const handleVoiceDone = async (text) => {
     const safeText = (text?.trim()) || suspectVoice.transcript?.trim();
     if (!safeText) return;
     setExtracting(true); setExtractError(""); setExtractedDetails(null);
     try {
-      const result = await extractSuspectFromVoice(safeText, language?.name || "English", GROQ_KEY);
+      const result = await extractSuspectFromVoice(safeText, language?.name || "English", groqManager.current);
       setExtractedDetails(result);
       if (result.sketchDescription) setDescription(result.sketchDescription);
     } catch (e) {
@@ -481,51 +460,14 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
     onSketchGenerated?.({ url: imgSrc, description });
   };
 
-  // ── Generate cascade: CF → NVIDIA → Flux → Pollinations → HF ───────────────
+  // ── Generate cascade: Pollinations (keyless) → HuggingFace (keyless) ───────────
+  // NOTE: Cloudflare and NVIDIA NIM require server-side keys.
+  // They are available if a server proxy at /api/ai/image is added in a future phase.
   const generate = async () => {
     if (!description.trim()) { setError("Please describe the suspect's appearance first."); return; }
     setLoading(true); setError(""); setSketchUrl(null); setSource("");
 
-    // 1️⃣  Cloudflare Workers AI (primary)
-    if (CF_TOKEN && CF_ACCOUNT) {
-      try {
-        setStatus("⚡ Generating with Cloudflare Workers AI…");
-        const imgSrc = await generateWithCloudflare(description, CF_TOKEN, CF_ACCOUNT);
-        finishGeneration(imgSrc, "cloudflare");
-        return;
-      } catch (e) {
-        console.warn("Cloudflare failed:", e.message);
-        setStatus("⚠️ Cloudflare unavailable — trying NVIDIA NIM…");
-      }
-    }
-
-    // 2️⃣  NVIDIA NIM SDXL
-    if (NGC_KEY) {
-      try {
-        setStatus("⚡ Generating with NVIDIA NIM…");
-        const imgSrc = await generateWithNvidia(description, NGC_KEY);
-        finishGeneration(imgSrc, "nvidia");
-        return;
-      } catch (e) {
-        console.warn("NVIDIA SDXL failed:", e.message);
-        setStatus("⚠️ NVIDIA unavailable — trying NVIDIA Flux…");
-      }
-    }
-
-    // 3️⃣  NVIDIA NIM Flux
-    if (NGC_FLUX_KEY) {
-      try {
-        setStatus("⚡ Generating with NVIDIA Flux…");
-        const imgSrc = await generateWithNvidiaFlux(description, NGC_FLUX_KEY);
-        finishGeneration(imgSrc, "flux");
-        return;
-      } catch (e) {
-        console.warn("NVIDIA Flux failed:", e.message);
-        setStatus("⚠️ NVIDIA Flux unavailable — trying Pollinations AI…");
-      }
-    }
-
-    // 4️⃣  Pollinations AI
+    // 1️⃣  Pollinations AI (keyless, public)
     try {
       setStatus("🌐 Generating with Pollinations AI…");
       const imgSrc = await generateWithPollinations(description);
@@ -536,7 +478,7 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
       setStatus("⚠️ Pollinations unavailable — trying Hugging Face…");
     }
 
-    // 5️⃣  Hugging Face
+    // 2️⃣  Hugging Face (keyless)
     try {
       setStatus("🤗 Generating with Hugging Face…");
       const imgSrc = await generateWithHuggingFace(description);
@@ -549,14 +491,10 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
   };
 
   const SOURCE_BADGES = {
-    cloudflare:   { label: "☁️ Cloudflare Workers AI", cls: "bg-orange-100 text-orange-700" },
-    nvidia:       { label: "⚡ NVIDIA NIM",             cls: "bg-green-100 text-green-700"   },
-    flux:         { label: "⚡ NVIDIA Flux",             cls: "bg-emerald-100 text-emerald-700" },
-    pollinations: { label: "🌐 Pollinations AI",         cls: "bg-blue-100 text-blue-700"     },
-    huggingface:  { label: "🤗 Hugging Face",            cls: "bg-yellow-100 text-yellow-700" },
+    pollinations: { label: "🌐 Pollinations AI",  cls: "bg-blue-100 text-blue-700"     },
+    huggingface:  { label: "🤗 Hugging Face",    cls: "bg-yellow-100 text-yellow-700" },
   };
   const sourceBadge = SOURCE_BADGES[source];
-  const hasCF       = CF_TOKEN && CF_ACCOUNT;
 
   return (
     <div className="space-y-4">
@@ -565,15 +503,9 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
       <div className="flex items-center gap-2 flex-wrap">
         <User className="h-5 w-5 text-blue-600" />
         <h3 className="font-semibold text-gray-800">AI Suspect Sketch</h3>
-        {hasCF ? (
-          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
-            ☁️ Cloudflare Workers AI + 4 Backups
-          </span>
-        ) : (
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-            🌐 Pollinations + 🤗 HF Backup
-          </span>
-        )}
+        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+          🌐 Pollinations + 🤗 HF Backup
+        </span>
       </div>
 
       {/* Disclaimer */}
@@ -583,23 +515,10 @@ export default function SuspectSketch({ onSketchGenerated, initialDescription = 
       </div>
 
       {/* Provider status */}
-      {hasCF ? (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-800 flex items-center gap-2">
-          <CheckCircle className="h-3.5 w-3.5 shrink-0 text-orange-600" />
-          <span>
-            <strong>Cloudflare Workers AI</strong> active (FLUX.1-schnell → SDXL → DreamShaper → SDXL Lightning).
-            Fallbacks: NVIDIA NIM → Pollinations → Hugging Face.
-          </span>
-        </div>
-      ) : (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-          💡 Add{" "}
-          <code className="bg-blue-100 px-1 rounded">VITE_CF_AI_TOKEN</code> and{" "}
-          <code className="bg-blue-100 px-1 rounded">VITE_CF_ACCOUNT_ID</code> to{" "}
-          <code className="bg-blue-100 px-1 rounded">.env</code> for Cloudflare Workers AI.
-          Using Pollinations AI → Hugging Face as fallbacks.
-        </div>
-      )}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+        🌐 Sketch generation powered by keyless multi-model AI (Pollinations AI & Hugging Face).
+      </div>
+
 
       {/* ── VOICE INPUT ─────────────────────────────────────────────────────── */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">

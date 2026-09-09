@@ -52,6 +52,12 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <button
+              onClick={() => navigate("/citizen-login")}
+              className="text-xs font-semibold text-slate-600 hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              Citizen Login
+            </button>
+            <button
               onClick={() => navigate("/fir-history")}
               className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
             >

@@ -17,7 +17,7 @@ import { normalizeFIR } from "@/lib/firSchema";
 import { useFIRStore } from "@/hooks/useFIRStore";
 import { getNearbyStations } from "@/utils/policeStations";
 import { suggestIPCSections, validateIPCSections } from "@/utils/bnsValidator";
-import { generateFIRId } from "@/utils";
+import { generateFIRId, generateUUID, generateSubmissionId } from "@/utils";
 
 const STEPS = [
   { label: "Language", icon: Mic      },
@@ -141,18 +141,30 @@ export default function RecordStatement() {
   const [declarationAgreed, setDeclarationAgreed] = useState(false);
   const [ipcInput, setIpcInput]     = useState("");
   const [ipcValidation, setIpcValidation] = useState(null);
-  const [form, setForm]             = useState(EMPTY_FORM);
 
   // Ref stores the latest extracted data synchronously — avoids stale closure issues
   const extractedRef = useRef(null);
 
   const { saveFIR, isOnline, checkDuplicate } = useFIRStore();
 
-  // Load citizen email from session (set during CitizenLogin OTP verification)
-  const citizenEmail = (() => {
-    try { return JSON.parse(sessionStorage.getItem("citizen_user") || "{}").email || ""; }
-    catch { return ""; }
+  // Load citizen user from localStorage (or fallback to sessionStorage)
+  const citizenUser = (() => {
+    try {
+      const raw = localStorage.getItem("citizen_user") || sessionStorage.getItem("citizen_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   })();
+
+  const citizenEmail = citizenUser?.email || "";
+
+  const [form, setForm] = useState(() => ({
+    ...EMPTY_FORM,
+    complainantName: citizenUser?.name || "",
+    complainantPhone: citizenUser?.phone || "",
+    complainantEmail: citizenUser?.email || "",
+  }));
 
   const [provenance, setProvenance] = useState({});
   const provenanceRef = useRef({});
@@ -341,7 +353,8 @@ export default function RecordStatement() {
 
       const rawFIR = {
         ...form,
-        id:                generateFIRId(),
+        id:                (form.id && !form.id.startsWith("DRAFT-")) ? form.id : generateUUID(),
+        submissionId:      isOnline ? null : generateSubmissionId({ state: incState, stationCode }),
         language:          lang?.name || "English",
         transcribedText:   transcript,
         incidentLatitude:  incLat,
@@ -395,6 +408,11 @@ export default function RecordStatement() {
   const touristLangs = filteredLangs.filter(l => l.group === "Tourist");
 
   // ── Step renderers ────────────────────────────────────────────────
+  const handleSelectLanguage = (selectedLang) => {
+    setLang(selectedLang);
+    setStep(1); // Advance directly to next step upon language selection
+  };
+
   const renderStep = () => {
 
     /* STEP 0 — Language */
@@ -403,6 +421,7 @@ export default function RecordStatement() {
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900">Select Your Language</h2>
           <p className="text-sm text-gray-500 mt-1">மொழியை தேர்ந்தெடுக்கவும் · Choose your language · अपनी भाषा चुनें</p>
+          <p className="text-xs text-blue-600 font-semibold mt-0.5">Click any language to proceed directly</p>
         </div>
         <input
           type="text"
@@ -417,12 +436,16 @@ export default function RecordStatement() {
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">🇮🇳 22 Official Indian Languages</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {indianLangs.map(l => (
-                <button key={l.code} onClick={() => setLang(l)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all ${
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => handleSelectLanguage(l)}
+                  className={`p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
                     lang?.code === l.code
                       ? "border-blue-600 bg-blue-50 shadow-sm"
-                      : "border-gray-200 bg-white hover:border-blue-300"
-                  }`}>
+                      : "border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/40"
+                  }`}
+                >
                   <p className="text-sm font-bold text-gray-800">{l.native}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{l.name}</p>
                 </button>
@@ -436,12 +459,16 @@ export default function RecordStatement() {
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">🌍 Tourist / Foreign Languages (28)</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {touristLangs.map(l => (
-                <button key={l.code} onClick={() => setLang(l)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all ${
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => handleSelectLanguage(l)}
+                  className={`p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
                     lang?.code === l.code
                       ? "border-blue-600 bg-blue-50 shadow-sm"
-                      : "border-gray-200 bg-white hover:border-blue-300"
-                  }`}>
+                      : "border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/40"
+                  }`}
+                >
                   <p className="text-sm font-bold text-gray-800">{l.flag} {l.native}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{l.name}</p>
                 </button>
@@ -451,8 +478,15 @@ export default function RecordStatement() {
         )}
 
         {lang && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-            <p className="text-sm text-blue-700">✅ Selected: <strong>{lang.native}</strong> ({lang.name})</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center flex items-center justify-between">
+            <p className="text-sm text-blue-700">✅ Current Language: <strong>{lang.native}</strong> ({lang.name})</p>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="text-xs font-bold text-white bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700"
+            >
+              Continue →
+            </button>
           </div>
         )}
       </div>
@@ -461,6 +495,27 @@ export default function RecordStatement() {
     /* STEP 1 — Voice Recording */
     if (step === 1) return (
       <div className="space-y-4">
+        {/* Accessible Language Banner with 1-click Change */}
+        <div className="flex items-center justify-between bg-blue-50/90 border border-blue-200 rounded-xl px-4 py-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">{lang?.flag || "🌐"}</span>
+            <div>
+              <p className="text-[11px] text-blue-600 font-bold uppercase tracking-wider">Statement Language</p>
+              <p className="text-sm font-bold text-blue-950">
+                {lang?.native || "English"} <span className="text-blue-700 font-medium">({lang?.name || "English"})</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStep(0)}
+            className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100/70 px-3 py-1.5 rounded-xl border border-blue-300 shadow-xs transition active:scale-95"
+            title="Wrong language selected? Click to switch"
+          >
+            Wrong language? Change
+          </button>
+        </div>
+
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900">Record Your Statement</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -673,11 +728,15 @@ export default function RecordStatement() {
           </div>
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">FIR Submitted!</h2>
+          <h2 className="text-2xl font-bold text-gray-900">FIR Statement Submitted</h2>
           <p className="text-gray-500 mt-1">உங்கள் புகார் பதிவு செய்யப்பட்டது · Statement Recorded Officially</p>
-          <div className="inline-block mt-3 bg-blue-50 border border-blue-200 rounded-xl px-6 py-2">
-            <p className="text-sm font-mono font-bold text-blue-700">{firData?.id}</p>
+          <div className="inline-block mt-3 bg-blue-50 border border-blue-200 rounded-xl px-6 py-2.5">
+            <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5">Citizen Acknowledgment / Reference ID</p>
+            <p className="text-sm font-mono font-bold text-blue-800">{firData?.submissionId || firData?.id}</p>
           </div>
+          <p className="text-[11px] text-gray-500 mt-2">
+            Official FIR Number is assigned exclusively by jurisdictional police upon formal registration.
+          </p>
           {!isOnline && <p className="text-xs text-amber-600 mt-2">⚠️ Saved locally — syncs when online</p>}
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-4 text-left">
@@ -828,12 +887,25 @@ export default function RecordStatement() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sticky header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div>
-          <h1 className="text-base font-bold text-blue-700">REPORT — New FIR</h1>
-          <p className="text-xs text-gray-400">
-            Step {step + 1}/{STEPS.length} · {isOnline ? "🟢 Online" : "🔴 Offline"}
-          </p>
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-base font-bold text-blue-700">REPORT — New FIR</h1>
+            <p className="text-xs text-gray-400">
+              Step {step + 1}/{STEPS.length} · {isOnline ? "🟢 Online" : "🔴 Offline"}
+            </p>
+          </div>
+          {lang && step > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep(0)}
+              title="Click to switch statement language"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold hover:bg-blue-100 hover:border-blue-300 transition cursor-pointer"
+            >
+              <span>{lang.flag || "🌐"} {lang.native}</span>
+              <span className="text-[10px] text-blue-500 font-medium">· Change</span>
+            </button>
+          )}
         </div>
         <button
           onClick={() => step > 0 ? setStep(s => s - 1) : window.history.back()}
@@ -843,7 +915,7 @@ export default function RecordStatement() {
         </button>
       </div>
 
-      <StepBar steps={STEPS} current={step} />
+      <StepBar steps={STEPS} current={step} onStepClick={setStep} />
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 min-h-64">
@@ -864,7 +936,7 @@ export default function RecordStatement() {
                 onClick={() => {
                   const draft = {
                     ...form,
-                    id: generateFIRId(),
+                    id: generateFIRId({ isDraft: true }),
                     language: lang?.name,
                     status: "draft",
                     createdAt: new Date().toISOString(),

@@ -140,7 +140,9 @@ function CaseReviewModal({ fir, station, onClose, onUpdateStatus, onDownload, do
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-sm tracking-wide">{canonical.id}</span>
+                <span className="font-mono font-bold text-sm tracking-wide">
+                  {canonical.officialFIRNo ? `FIR: ${canonical.officialFIRNo}` : (canonical.submissionId ? `ACK: ${canonical.submissionId}` : canonical.id)}
+                </span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_COLORS[fir.status] || "bg-slate-800 text-slate-300"}`}>
                   {STATUS_LABELS[fir.status] || fir.status}
                 </span>
@@ -670,7 +672,21 @@ export default function PoliceDashboard() {
     fake:          firs.filter(f => f.status === "fake_fir").length,
   };
 
-  if (!station) return null;
+  if (!station) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-4 text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20 shadow-lg">
+            <Shield className="h-6 w-6 text-blue-400" />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-300">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+            <span>Restoring station session...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -733,9 +749,9 @@ export default function PoliceDashboard() {
           <button
             onClick={async () => {
               await clearPoliceSession();
-              navigate("/police-login");
+              navigate("/police-login", { replace: true });
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold transition border border-rose-900/50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold transition border border-rose-900/50 cursor-pointer"
           >
             <LogOut className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Logout</span>
@@ -837,7 +853,9 @@ export default function PoliceDashboard() {
                     
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-sm text-slate-900">{canonical.id}</span>
+                        <span className="font-mono font-bold text-sm text-slate-900">
+                          {canonical.officialFIRNo ? `FIR: ${canonical.officialFIRNo}` : (canonical.submissionId ? `ACK: ${canonical.submissionId}` : canonical.id)}
+                        </span>
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${STATUS_COLORS[fir.status] || "bg-slate-100 text-slate-700"}`}>
                           {STATUS_LABELS[fir.status] || fir.status}
                         </span>

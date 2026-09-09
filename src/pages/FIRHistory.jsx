@@ -17,7 +17,15 @@ export default function FIRHistory() {
     .filter((f) => filter === "all" || f.status === filter)
     .filter((f) => {
       const q = search.toLowerCase();
-      return !q || f.complainantName?.toLowerCase().includes(q) || f.crimeType?.toLowerCase().includes(q) || f.id?.toLowerCase().includes(q) || f.incidentLocation?.toLowerCase().includes(q);
+      return (
+        !q ||
+        f.complainantName?.toLowerCase().includes(q) ||
+        f.crimeType?.toLowerCase().includes(q) ||
+        f.id?.toLowerCase().includes(q) ||
+        f.submissionId?.toLowerCase().includes(q) ||
+        f.officialFIRNo?.toLowerCase().includes(q) ||
+        f.incidentLocation?.toLowerCase().includes(q)
+      );
     })
     .sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
@@ -78,7 +86,9 @@ export default function FIRHistory() {
                     <p className="text-xs text-gray-500 truncate mt-0.5">
                       {fir.crimeType || "Unknown crime"} · {fir.incidentLocation || "—"} · {fir.incidentDate || "—"}
                     </p>
-                    <p className="text-xs font-mono text-blue-500 mt-0.5">{fir.id}</p>
+                    <p className="text-xs font-mono text-blue-500 mt-0.5">
+                      {fir.officialFIRNo ? `FIR: ${fir.officialFIRNo}` : (fir.submissionId || fir.id)}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4 shrink-0">

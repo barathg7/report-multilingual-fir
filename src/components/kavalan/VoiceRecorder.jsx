@@ -309,13 +309,10 @@ export default function VoiceRecorder({ language, onComplete }) {
   const latestCorrectedRef = useRef("");
   const groqManagerRef = useRef(null);
 
-  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-
+  // GroqManager uses a server-side proxy (/api/ai/groq) — no client-side API key needed.
   useEffect(() => {
-    if (apiKey) {
-      groqManagerRef.current = new GroqManager(apiKey);
-    }
-  }, [apiKey]);
+    groqManagerRef.current = new GroqManager();
+  }, []);
 
   const hasLocationFromCrime = !!(
     crimeExtracted?.incidentLocation ||
@@ -325,22 +322,9 @@ export default function VoiceRecorder({ language, onComplete }) {
 
   const processCrimeStatement = async (rawText) => {
     if (!rawText?.trim()) return;
-    
-    if (!apiKey) {
-      setProcessingError("AI service key not configured. Your transcript is saved and you can proceed with manual review.");
-      setCorrectedText(rawText);
-      onComplete?.({
-        text: rawText,
-        extracted: {},
-        confidence: 0.3,
-        language,
-      });
-      return;
-    }
 
     if (!groqManagerRef.current) {
-      setProcessingError("GroqManager not initialized. Check API key.");
-      return;
+      groqManagerRef.current = new GroqManager();
     }
 
     setProcessing(true);

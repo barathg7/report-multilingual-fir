@@ -38,23 +38,32 @@ export const STATUS_COLORS = {
   fake_fir: "bg-rose-50 text-rose-700 border-rose-200",
 };
 
-import { generateSubmissionId, generateDraftId, generateOfficialFIRNumber } from "@/utils";
+// generateOfficialFIRNumber is intentionally NOT imported here.
+// Official FIR numbers are ONLY assigned server-side by the DB RPC
+// (update_fir_status_secure) when police formally begin investigation.
+// See: supabase/migrations/20260909_phase1_2_concurrency_and_counters.sql
+import { generateSubmissionId, generateDraftId, generateUUID } from "@/utils";
 
 /**
- * Generate official FIR Reference ID dynamically using state and station code.
- * Outside Tamil Nadu, this will NEVER default to TN001.
+ * Generates a citizen acknowledgment / reference ID for a new complaint submission.
+ *
+ * IMPORTANT: This is NOT an official FIR number.
+ * - It is a reference for the citizen to track their complaint.
+ * - An official FIR number (e.g. TN-CHN-001/2026/0042) is assigned ONLY
+ *   by the database RPC when a police officer formally registers the complaint.
+ * - The client MUST NOT display this as an "official FIR number".
  */
 export function generateCanonicalFIRId(opts = {}) {
   return generateSubmissionId(opts);
 }
 
 /**
- * Creates a blank canonical FIR structure
+ * Creates a blank canonical FIR structure with an immutable UUID primary key.
  */
 export function createDefaultFIR() {
   const now = new Date().toISOString();
   return {
-    id: generateDraftId(),
+    id: generateUUID(),
     draftId: generateDraftId(),
     submissionId: null,
     officialFIRNo: null,

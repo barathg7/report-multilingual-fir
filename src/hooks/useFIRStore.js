@@ -19,12 +19,12 @@ export function useFIRStore() {
     if (!navigator.onLine) return { success: false, reason: "offline" };
     try {
       const row = toSupabaseRow(fir);
-      const { error } = await supabase.from("firs").upsert(row, { onConflict: "id" });
+      const { data, error } = await supabase.from("firs").upsert(row, { onConflict: "id" }).select();
       if (error) {
         console.warn("Supabase upsert warning:", error.message);
         return { success: false, error: error.message };
       }
-      return { success: true };
+      return { success: true, data: data?.[0] };
     } catch (err) {
       console.warn("Remote sync failed:", err.message);
       return { success: false, error: err.message };
@@ -47,7 +47,10 @@ export function useFIRStore() {
             const res = await pushFIRToRemote(fir);
             if (res.success) {
               hasUpdates = true;
-              return { ...fir, _syncStatus: "synced", _syncedAt: new Date().toISOString() };
+              const merged = { ...fir, _syncStatus: "synced", _syncedAt: new Date().toISOString() };
+              if (res.data?.submission_id) merged.submissionId = res.data.submission_id;
+              if (res.data?.official_fir_no) merged.officialFIRNo = res.data.official_fir_no;
+              return merged;
             }
           }
           return fir;
@@ -87,11 +90,15 @@ export function useFIRStore() {
       const res = await pushFIRToRemote(canonical);
       if (res.success) {
         syncStatus = "synced";
+        if (res.data?.submission_id) canonical.submissionId = res.data.submission_id;
+        if (res.data?.official_fir_no) canonical.officialFIRNo = res.data.official_fir_no;
       }
     }
 
     const recordToSave = {
       ...canonical,
+      submissionId: canonical.submissionId,
+      officialFIRNo: canonical.officialFIRNo,
       _syncStatus: syncStatus,
       _savedAt: new Date().toISOString(),
     };

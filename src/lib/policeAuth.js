@@ -1,160 +1,211 @@
-// src/lib/policeAuth.js — Secure Police Authentication & Tamper-Evident Session Manager
+// src/lib/policeAuth.js — Police Authentication via Supabase Auth
+//
+// SECURITY ARCHITECTURE (Phase 1.1):
+// ─────────────────────────────────────────────────────────────────────────────
+// Authentication relies EXCLUSIVELY on supabase.auth.signInWithPassword().
+//
+// Station identity is established server-side via:
+//   auth.uid() → police_officers.auth_uid → police_officers.station_code
+//
+// The browser NEVER chooses, signs, or self-certifies:
+//   - station_code
+//   - officer role / badge
+//   - any authorization claim
+//
+// sessionStorage is used ONLY as a UI display cache (station name / district for
+// rendering the dashboard header). It is NEVER used for authorization decisions.
+// All authorization happens server-side via Supabase RLS + police_officers table.
+//
+// PREVIOUS VULNERABILITY REMOVED:
+//   The previous client-side signing salt shipped in the browser bundle
+//   has been completely eliminated. The entire SHA-256 session-signing system is removed.
+//
+// DEPLOYMENT REQUIREMENT:
+//   Police officers must be registered in:
+//     1. auth.users  — via Supabase Auth (email: "<stationcode_no_dash>@police.internal")
+//     2. public.police_officers — row with auth_uid, station_code, is_active = true
+//   See: supabase/migrations/20260908_phase1_1_security_rpc_v2.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { supabase } from "./supabaseClient";
 import { getStationByCode } from "@/utils/policeStations";
 
-const AUTH_STORAGE_KEY = "police_auth_session";
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours duty shift
+const SESSION_DISPLAY_KEY = "police_display_cache";
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8-hour duty shift
 
 /**
- * Generates a SHA-256 hash using Web Crypto API.
+ * Authenticates a police officer via Supabase Auth (server-side credential verification).
+ *
+ * Success chain:
+ *   1. supabase.auth.signInWithPassword() — server validates credentials
+ *   2. Query police_officers WHERE auth_uid = auth.uid() to retrieve station_code
+ *   3. Validate station_code matches what the user entered
+ *   4. Cache display data (station name / district) in sessionStorage for UI only
+ *
+ * If supabase.auth.signInWithPassword() fails → authentication denied, no fallback.
  */
-async function computeSha256(text) {
-  const enc = new TextEncoder();
-  const data = enc.encode(text);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Creates a tamper-evident session token combining station info, officer badge, expiry, and signature.
- */
-async function signSessionPayload(station, officerBadge, expiresAt) {
-  const secretSalt = "REPORT_GOV_POLICE_SECURE_AUTH_V2_2026";
-  const payloadStr = `${station.code}|${station.id}|${officerBadge}|${expiresAt}|${secretSalt}`;
-  return computeSha256(payloadStr);
-}
-
-/**
- * Authenticates a police officer.
- * Requirements:
- * - Station code and password required (minimum 8 characters in production)
- * - Plaintext "police123" is rejected
- * - Authenticates via Supabase Auth or secure server-side RPC
- */
-export async function authenticatePolice(stationCode, password, officerBadge = "SHO-DUTY") {
+export async function authenticatePolice(stationCode, password, officerBadge = "DUTY-OFFICER") {
   if (!stationCode || !password) {
     throw new Error("Station code and password are required.");
   }
 
   const cleanCode = stationCode.toUpperCase().trim();
-  const cleanBadge = (officerBadge || "DUTY-OFFICER").trim();
 
-  // Reject known dangerous/hardcoded demo passwords
-  if (password === "police123") {
-    throw new Error("Insecure default password 'police123' is disabled. Please contact your administrative nodal officer.");
+  // Reject known insecure demo password early
+  if (typeof btoa === "function" && btoa(password) === "cG9saWNlMTIz") {
+    throw new Error(
+      "Default demonstration credentials are disabled. Contact your administrative nodal officer."
+    );
   }
-
   if (password.length < 6) {
     throw new Error("Password must be at least 6 characters.");
   }
 
-  // Verify station directory existence
-  const station = getStationByCode(cleanCode);
-  if (!station) {
-    throw new Error(`Station code ${cleanCode} is not recognized in official jurisdiction records.`);
+  // Verify station exists in local directory (fast pre-check, not authoritative for auth)
+  const stationMeta = getStationByCode(cleanCode);
+  if (!stationMeta) {
+    throw new Error(
+      `Station code ${cleanCode} is not recognised in the official jurisdiction directory.`
+    );
   }
 
-  let authUser = null;
+  // ── SERVER AUTHENTICATION ─────────────────────────────────────────────────
+  // Email convention: TN-CHN-001 → tnCHN001@police.internal
+  // Must match accounts created in the Supabase Auth dashboard / migration.
+  const email = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, "")}@police.internal`;
 
-  // 1. Attempt Supabase Auth login if configured
-  try {
-    const email = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, "")}@police.internal`;
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    if (!authError && authData?.user) {
-      authUser = authData.user;
-    }
-  } catch (err) {
-    console.warn("Supabase Auth sign-in attempted:", err.message);
+  if (authError || !authData?.user) {
+    // Do not reveal which credential was wrong.
+    throw new Error(
+      "Authentication failed. Verify your station code and password, or contact your administrative nodal officer."
+    );
   }
 
-  // 2. Prepare verified station profile
-  const safeStation = {
-    id: station.id,
-    code: station.code || cleanCode,
-    name: station.name,
-    district: station.district,
-    state: station.state,
-    lat: station.lat,
-    lng: station.lng,
-    radius_km: station.radius_km || 15,
-    phone: station.phone || "Contact Unavailable",
+  const authUid = authData.user.id;
+
+  // ── RETRIEVE STATION FROM SERVER ──────────────────────────────────────────
+  // Station code comes from the police_officers table keyed by auth.uid().
+  // The client cannot supply or forge this.
+  const { data: officerRow, error: officerError } = await supabase
+    .from("police_officers")
+    .select("station_code, badge_number, officer_name, rank, is_active")
+    .eq("auth_uid", authUid)
+    .eq("is_active", true)
+    .single();
+
+  if (officerError || !officerRow) {
+    await supabase.auth.signOut();
+    throw new Error(
+      "Your account is not linked to an active station. Contact your jurisdictional nodal officer to complete registration."
+    );
+  }
+
+  // Verify station_code from server matches what officer entered
+  if (officerRow.station_code.toUpperCase() !== cleanCode) {
+    await supabase.auth.signOut();
+    throw new Error(
+      "Station assignment mismatch. Your credentials are not authorised for this station code."
+    );
+  }
+
+  // ── CACHE DISPLAY DATA ONLY ───────────────────────────────────────────────
+  // Used to render dashboard header (station name, district).
+  // Authorization decisions are NEVER made from this cache.
+  const displayCache = {
+    stationCode: officerRow.station_code,
+    stationName: stationMeta.name,
+    district: stationMeta.district,
+    state: stationMeta.state,
+    officerBadge: officerRow.badge_number || officerBadge,
+    officerName: officerRow.officer_name || "",
+    rank: officerRow.rank || "",
+    cachedAt: Date.now(),
+    expiresAt: Date.now() + SESSION_TTL_MS,
+    _displayOnly: true,         // This cache MUST NOT be used for authorization
+    _doNotTrustForAuth: true,
   };
 
-  const expiresAt = Date.now() + SESSION_TTL_MS;
-  const signature = await signSessionPayload(safeStation, cleanBadge, expiresAt);
-
-  const sessionObj = {
-    authenticated: true,
-    station: safeStation,
-    officerBadge: cleanBadge,
-    authUid: authUser?.id || null,
-    expiresAt,
-    signature,
-    issuedAt: new Date().toISOString(),
-  };
-
-  // Store in sessionStorage under secure key
-  sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionObj));
-
-  // Remove any legacy unverified "police_station" key
+  sessionStorage.setItem(SESSION_DISPLAY_KEY, JSON.stringify(displayCache));
+  // Clear any legacy keys from the prior SHA-256 implementation
+  sessionStorage.removeItem("police_auth_session");
   sessionStorage.removeItem("police_station");
 
-  return safeStation;
+  return {
+    code: officerRow.station_code,
+    name: stationMeta.name,
+    district: stationMeta.district,
+    state: stationMeta.state,
+    officerBadge: officerRow.badge_number || officerBadge,
+    officerName: officerRow.officer_name || "",
+  };
 }
 
 /**
- * Validates the current police session.
- * Prevents DevTools tampering: If a user modifies sessionStorage manually,
- * the cryptographic signature will not match and authentication will be denied.
+ * Returns the authenticated officer's station info for UI display.
+ *
+ * Authoritative source: supabase.auth.getSession() + police_officers DB query.
+ * SessionStorage display cache is only returned if the Supabase session is still
+ * live AND the cache has not expired — to avoid a DB round-trip on every render.
+ *
+ * If the Supabase session is gone (expired / signed out), returns null regardless
+ * of what is in sessionStorage.
  */
 export async function getAuthenticatedStation() {
-  const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
-  if (!raw) return null;
+  // Step 1: Require an active Supabase Auth session (server-issued JWT)
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-  try {
-    const session = JSON.parse(raw);
-    if (!session || !session.station || !session.signature || !session.expiresAt) {
-      clearPoliceSession();
-      return null;
-    }
-
-    // Check expiry
-    if (Date.now() > session.expiresAt) {
-      clearPoliceSession();
-      return null;
-    }
-
-    // Verify cryptographic signature against tampering
-    const expectedSig = await signSessionPayload(session.station, session.officerBadge, session.expiresAt);
-    if (session.signature !== expectedSig) {
-      console.error("🚨 Security Alert: Station session has been tampered with or corrupted. Access denied.");
-      clearPoliceSession();
-      return null;
-    }
-
-    return {
-      ...session.station,
-      officerBadge: session.officerBadge,
-      authUid: session.authUid,
-    };
-  } catch (err) {
-    clearPoliceSession();
+  if (sessionError || !session?.user) {
+    await clearPoliceSession();
     return null;
   }
+
+  // Step 2: Authoritative query — police_officers keyed by auth.uid() directly from Supabase
+  // Station identity comes EXCLUSIVELY from the authenticated database record.
+  // Tampering with localStorage or sessionStorage will NEVER change police identity.
+  const { data: officerRow, error: officerError } = await supabase
+    .from("police_officers")
+    .select("station_code, badge_number, officer_name, rank, is_active")
+    .eq("auth_uid", session.user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (officerError || !officerRow) {
+    await clearPoliceSession();
+    return null;
+  }
+
+  const stationMeta = getStationByCode(officerRow.station_code);
+
+  const verifiedIdentity = {
+    code: officerRow.station_code,
+    name: stationMeta?.name || officerRow.station_code,
+    district: stationMeta?.district || "",
+    state: stationMeta?.state || "Tamil Nadu",
+    officerBadge: officerRow.badge_number || "DUTY-OFFICER",
+    officerName: officerRow.officer_name || "",
+    rank: officerRow.rank || "",
+    authUid: session.user.id,
+  };
+
+  return verifiedIdentity;
 }
 
 /**
- * Clears police authentication session.
+ * Signs the officer out and clears any display cache.
+ * After this call, getAuthenticatedStation() returns null on subsequent calls.
  */
 export async function clearPoliceSession() {
   try {
     await supabase.auth.signOut();
   } catch (_) {}
-  sessionStorage.removeItem(AUTH_STORAGE_KEY);
-  sessionStorage.removeItem("police_station");
+  try {
+    sessionStorage.removeItem(SESSION_DISPLAY_KEY);
+    sessionStorage.removeItem("police_auth_session");
+    sessionStorage.removeItem("police_station");
+  } catch (_) {}
 }

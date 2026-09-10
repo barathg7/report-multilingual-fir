@@ -1,6 +1,11 @@
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mic, User, Shield, MapPin, Camera, CheckCircle, FileText, Keyboard, Hand } from "lucide-react";
+import {
+  Mic, User, Shield, MapPin, Camera, CheckCircle, FileText,
+  Keyboard, Hand, ChevronRight, Globe2, Wifi, WifiOff,
+  AlertTriangle, Info, BookOpen, FlaskConical, Check, Save,
+  Sparkles, Pencil,
+} from "lucide-react";
 import StepBar from "@/components/ui/StepBar";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -14,6 +19,10 @@ import SuspectSketch from "@/components/kavalan/SuspectSketch";
 import FIRDocument from "@/components/kavalan/FIRDocument";
 import FIRDownload from "@/components/kavalan/FIRDownload";
 import DigitalSignature from "@/components/kavalan/DigitalSignature";
+import InputMethodSelector from "@/components/fir/InputMethodSelector";
+import ProvenanceBadge from "@/components/fir/ProvenanceBadge";
+import LegalSuggestionCard from "@/components/fir/LegalSuggestionCard";
+import SubmissionSummary from "@/components/fir/SubmissionSummary";
 import { normalizeFIR } from "@/lib/firSchema";
 import { useFIRStore } from "@/hooks/useFIRStore";
 import { getNearbyStations } from "@/utils/policeStations";
@@ -96,6 +105,24 @@ const EMPTY_FORM = {
 };
 
 // Note: formatDateForDisplay and formatTimeForDisplay are imported from @/utils
+
+// ── Module-scope layout helpers (outside component to prevent remounting) ──────
+// FieldGroup: section divider with optional "Optional" badge.
+// Defined at module scope so React does not recreate it on each render,
+// which would cause child form inputs to unmount/remount and lose focus.
+function FieldGroup({ title, optional = false, children }) {
+  return (
+    <div className="space-y-4">
+      {title && (
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</p>
+          {optional && <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">Optional</span>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
 
 export default function RecordStatement() {
   const navigate = useNavigate();
@@ -424,152 +451,136 @@ export default function RecordStatement() {
   const indianLangs  = filteredLangs.filter(l => l.group === "Indian");
   const touristLangs = filteredLangs.filter(l => l.group === "Tourist");
 
-  // ── Step renderers ────────────────────────────────────────────────
-  const handleSelectLanguage = (selectedLang) => {
-    setLang(selectedLang);
-    setStep(1); // Advance directly to next step upon language selection
-  };
+
 
   const renderStep = () => {
+    // ── Language selection handler (inside renderStep scope to avoid re-render issues) ──
+    const handleSelectLanguage = (selectedLang) => {
+      setLang(selectedLang);
+      setStep(1); // Advance directly to next step upon language selection
+    };
 
-    /* STEP 0 — Language */
+
+    /* ── STEP 0 — Language Selection ─────────────────────────────── */
     if (step === 0) return (
-      <div className="space-y-4">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-900">Select Your Language</h2>
-          <p className="text-sm text-gray-500 mt-1">மொழியை தேர்ந்தெடுக்கவும் · Choose your language · अपनी भाषा चुनें</p>
-          <p className="text-xs text-blue-600 font-semibold mt-0.5">Click any language to proceed directly</p>
+      <div className="space-y-5">
+        <div className="text-center space-y-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Step 1 — Language</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Select Your Language</h2>
+          <p className="text-sm text-slate-500">மொழியை தேர்ந்தெடுக்கவும் · Choose your language · अपनी भाषा चुनें</p>
+          <p className="text-xs text-civic-blue-600 font-semibold">Click any language to proceed directly →</p>
         </div>
-        <input
-          type="text"
-          value={langSearch}
-          onChange={e => setLangSearch(e.target.value)}
-          placeholder="🔍 Search language... (Tamil, French, Korean, Arabic...)"
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
 
+        {/* Search */}
+        <div className="relative">
+          <Globe2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <input
+            type="text"
+            value={langSearch}
+            onChange={e => setLangSearch(e.target.value)}
+            placeholder="Search language… (Tamil, French, Korean, Arabic…)"
+            className="w-full border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-civic-blue-500 focus:border-civic-blue-400 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]"
+            aria-label="Search for a language"
+          />
+        </div>
+
+        {/* Indian Languages */}
         {indianLangs.length > 0 && (
-          <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">🇮🇳 22 Official Indian Languages</p>
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">🇮🇳 22 Official Indian Languages</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {indianLangs.map(l => (
                 <button
                   key={l.code}
                   type="button"
                   onClick={() => handleSelectLanguage(l)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
-                    lang?.code === l.code
-                      ? "border-blue-600 bg-blue-50 shadow-sm"
-                      : "border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/40"
-                  }`}
+                  className={`group p-3 rounded-xl border-2 text-center transition-all cursor-pointer
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-civic-blue-500 focus-visible:ring-offset-2
+                    ${lang?.code === l.code
+                      ? "border-civic-blue-500 bg-civic-blue-50 shadow-[0_2px_8px_-2px_rgba(29,78,216,0.18)]"
+                      : "border-slate-200 bg-white hover:border-civic-blue-300 hover:bg-civic-blue-50/40 hover:-translate-y-0.5"
+                    }`}
+                  aria-pressed={lang?.code === l.code}
                 >
-                  <p className="text-sm font-bold text-gray-800">{l.native}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{l.name}</p>
+                  {lang?.code === l.code && (
+                    <div className="flex justify-end mb-0.5">
+                      <Check className="h-3 w-3 text-civic-blue-600" aria-hidden="true" />
+                    </div>
+                  )}
+                  <p className="text-sm font-bold text-civic-navy-900">{l.native}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{l.name}</p>
                 </button>
               ))}
             </div>
           </div>
         )}
 
+        {/* Tourist/Foreign Languages */}
         {touristLangs.length > 0 && (
-          <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">🌍 Tourist / Foreign Languages (28)</p>
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">🌍 International Languages (28)</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {touristLangs.map(l => (
                 <button
                   key={l.code}
                   type="button"
                   onClick={() => handleSelectLanguage(l)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
-                    lang?.code === l.code
-                      ? "border-blue-600 bg-blue-50 shadow-sm"
-                      : "border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/40"
-                  }`}
+                  className={`group p-3 rounded-xl border-2 text-center transition-all cursor-pointer
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-civic-blue-500 focus-visible:ring-offset-2
+                    ${lang?.code === l.code
+                      ? "border-civic-blue-500 bg-civic-blue-50 shadow-[0_2px_8px_-2px_rgba(29,78,216,0.18)]"
+                      : "border-slate-200 bg-white hover:border-civic-blue-300 hover:bg-civic-blue-50/40 hover:-translate-y-0.5"
+                    }`}
+                  aria-pressed={lang?.code === l.code}
                 >
-                  <p className="text-sm font-bold text-gray-800">{l.flag} {l.native}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{l.name}</p>
+                  {lang?.code === l.code && (
+                    <div className="flex justify-end mb-0.5">
+                      <Check className="h-3 w-3 text-civic-blue-600" aria-hidden="true" />
+                    </div>
+                  )}
+                  <p className="text-sm font-bold text-civic-navy-900">{l.flag} {l.native}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{l.name}</p>
                 </button>
               ))}
             </div>
           </div>
         )}
 
+        {/* Selected language confirm strip */}
         {lang && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center flex items-center justify-between">
-            <p className="text-sm text-blue-700">✅ Current Language: <strong>{lang.native}</strong> ({lang.name})</p>
+          <div className="flex items-center justify-between gap-3 p-3 bg-civic-blue-50 border border-civic-blue-200 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 text-civic-blue-600 shrink-0" aria-hidden="true" />
+              <p className="text-sm text-civic-blue-800 font-semibold">
+                {lang.native} <span className="font-normal text-civic-blue-600">({lang.name}) selected</span>
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="text-xs font-bold text-white bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-civic-blue-700 hover:bg-civic-blue-800 px-3 py-1.5 rounded-lg transition-colors min-h-[36px]"
             >
-              Continue →
+              Continue <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
       </div>
     );
 
-    /* STEP 1 — Statement Input */
+    /* ── STEP 1 — Statement Input ────────────────────────────────── */
     if (step === 1) return (
-      <div className="space-y-4">
-
-        {/* Heading */}
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-900">Record Your Statement</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Speak in <strong>{lang?.native}</strong> — or choose another input method
+      <div className="space-y-5">
+        {/* Step header */}
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 2 — Record Statement</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Record Your Statement</h2>
+          <p className="text-sm text-slate-500">
+            Speak in <strong className="text-civic-navy-700">{lang?.native}</strong> — or choose another input method below.
           </p>
         </div>
 
-        {/* ── Input Mode Switcher ── */}
-        <div
-          role="group"
-          aria-label="Choose statement input method"
-          className="flex gap-2 p-1 bg-gray-100 rounded-xl"
-        >
-          <button
-            type="button"
-            id="input-mode-voice"
-            onClick={() => setInputMode("voice")}
-            aria-pressed={inputMode === "voice"}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
-              inputMode === "voice"
-                ? "bg-white shadow-sm text-blue-700 border border-blue-200"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <Mic className="h-4 w-4" aria-hidden="true" />
-            <span>Voice</span>
-          </button>
-          <button
-            type="button"
-            id="input-mode-type"
-            onClick={() => setInputMode("type")}
-            aria-pressed={inputMode === "type"}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
-              inputMode === "type"
-                ? "bg-white shadow-sm text-blue-700 border border-blue-200"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <Keyboard className="h-4 w-4" aria-hidden="true" />
-            <span>Type</span>
-          </button>
-          <button
-            type="button"
-            id="input-mode-sign"
-            onClick={() => setInputMode("sign")}
-            aria-pressed={inputMode === "sign"}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition ${
-              inputMode === "sign"
-                ? "bg-white shadow-sm text-indigo-700 border border-indigo-200"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <Hand className="h-4 w-4" aria-hidden="true" />
-            <span>Sign Language (Experimental)</span>
-          </button>
-        </div>
+        {/* Input method selector */}
+        <InputMethodSelector inputMode={inputMode} setInputMode={setInputMode} />
 
         {/* ── Voice mode ── */}
         {inputMode === "voice" && (
@@ -585,11 +596,9 @@ export default function RecordStatement() {
         {/* ── Type mode ── */}
         {inputMode === "type" && (
           <div className="space-y-3">
-            <label htmlFor="type-statement" className="block text-sm font-semibold text-gray-700">
-              Type Your Statement
-            </label>
             <Textarea
               id="type-statement"
+              label="Your Statement"
               value={form.incidentDescription}
               onChange={e => {
                 autoSuggest(e.target.value);
@@ -602,197 +611,295 @@ export default function RecordStatement() {
                 setProvenance(p => ({ ...p, incidentDescription: meta }));
               }}
               rows={8}
-              placeholder={`Type your statement in ${lang?.native || "your language"}...`}
+              placeholder={`Type your statement in ${lang?.native || "your language"}…`}
               aria-label="Type your statement"
+              helper="Text typed here is saved directly to the FIR. You can review and edit it in the next steps."
             />
-            <p className="text-xs text-gray-400">Text typed here is saved directly to the FIR.</p>
           </div>
         )}
 
-        {/* ── Sign Language mode ── */}
+        {/* ── Sign Language mode — Sign Language (Experimental) ── */}
         {inputMode === "sign" && (
-          <SignLanguageRecorder
-            existingText={form.incidentDescription}
-            onConfirm={handleSignConfirm}
-            onCancel={() => setInputMode("voice")}
-          />
+          <div className="space-y-3" aria-label="Sign Language (Experimental) input mode">
+            {/* Experimental notice */}
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+              <FlaskConical className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-emerald-800">ISL Gesture Input — Experimental</p>
+                <p className="text-xs text-emerald-700">
+                  Limited gesture suggestions only. Review all suggestions carefully before adding to your complaint.
+                  This is not full ISL translation.
+                </p>
+              </div>
+            </div>
+            <SignLanguageRecorder
+              existingText={form.incidentDescription}
+              onConfirm={handleSignConfirm}
+              onCancel={() => setInputMode("voice")}
+            />
+          </div>
         )}
 
         {/* Live preview of extracted data for type / sign modes */}
         {inputMode !== "voice" && form.complainantName && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-1">
-            <p className="text-xs font-bold text-green-700 uppercase">✅ Form auto-filled — tap Next to verify</p>
-            {form.complainantName  && <p className="text-sm text-green-800">👤 <strong>Name:</strong> {form.complainantName}</p>}
-            {form.complainantPhone && <p className="text-sm text-green-800">📞 <strong>Phone:</strong> {form.complainantPhone}</p>}
-            {form.complainantAge   && <p className="text-sm text-green-800">🎂 <strong>Age:</strong> {form.complainantAge}</p>}
-            {form.crimeType        && <p className="text-sm text-green-800">🚨 <strong>Crime:</strong> {form.crimeType}</p>}
-            {form.incidentDate     && (
-              <p className="text-sm text-green-800">
-                📅 <strong>Date:</strong> {formatDateForDisplay(form.incidentDate)}
-                {form.incidentTime ? ` · ${formatTimeForDisplay(form.incidentTime)}` : ""}
-              </p>
-            )}
-            {form.incidentLocation && <p className="text-sm text-green-800">📍 <strong>Location:</strong> {form.incidentLocation}</p>}
-            {parseItemsList(form.stolenItems).length > 0 && (
-              <div className="text-sm text-green-800">
-                <p className="font-bold">💼 <strong>Items:</strong></p>
-                <ul className="list-disc list-inside pl-2 text-xs">
-                  {parseItemsList(form.stolenItems).map((it, idx) => (
-                    <li key={idx}>{it}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {form.ipcSections?.length > 0 && (
-              <p className="text-sm text-green-800">⚖️ <strong>BNS:</strong> {form.ipcSections.map(s => `§${s}`).join(", ")}</p>
-            )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-civic-blue-500 shrink-0" aria-hidden="true" />
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Auto-filled — tap Next to verify</p>
+            </div>
+            <div className="space-y-1.5">
+              {form.complainantName  && <p className="text-sm text-slate-700"><span className="font-semibold">Name:</span> {form.complainantName}</p>}
+              {form.complainantPhone && <p className="text-sm text-slate-700"><span className="font-semibold">Phone:</span> {form.complainantPhone}</p>}
+              {form.complainantAge   && <p className="text-sm text-slate-700"><span className="font-semibold">Age:</span> {form.complainantAge}</p>}
+              {form.crimeType        && <p className="text-sm text-slate-700"><span className="font-semibold">Crime Type:</span> {form.crimeType}</p>}
+              {form.incidentDate     && (
+                <p className="text-sm text-slate-700">
+                  <span className="font-semibold">Date:</span> {formatDateForDisplay(form.incidentDate)}
+                  {form.incidentTime ? ` · ${formatTimeForDisplay(form.incidentTime)}` : ""}
+                </p>
+              )}
+              {form.incidentLocation && <p className="text-sm text-slate-700"><span className="font-semibold">Location:</span> {form.incidentLocation}</p>}
+              {parseItemsList(form.stolenItems).length > 0 && (
+                <div className="text-sm text-slate-700">
+                  <span className="font-semibold">Stolen Items:</span>
+                  <ul className="list-disc list-inside pl-3 mt-0.5 text-xs text-slate-600">
+                    {parseItemsList(form.stolenItems).map((it, idx) => <li key={idx}>{it}</li>)}
+                  </ul>
+                </div>
+              )}
+              {form.ipcSections?.length > 0 && (
+                <p className="text-sm text-slate-700"><span className="font-semibold">BNS Suggestions:</span> {form.ipcSections.map(s => `§${s}`).join(", ")}</p>
+              )}
+            </div>
           </div>
         )}
       </div>
     );
 
-    /* STEP 2 — Complainant Details */
+    /* ── STEP 2 — Complainant Details ────────────────────────────── */
     if (step === 2) return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">Complainant Details</h2>
-        <p className="text-sm text-gray-500">Auto-filled from voice — verify and correct if needed</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Full Name *"
-            value={form.complainantName}
-            onChange={e => upd("complainantName", e.target.value)}
-            placeholder="Your full name"
-          />
-          <Input
-            label="Phone Number *"
-            value={form.complainantPhone}
-            onChange={e => upd("complainantPhone", e.target.value)}
-            placeholder="10-digit mobile number"
-          />
-          <Input
-            label="Age"
-            value={form.complainantAge}
-            onChange={e => upd("complainantAge", e.target.value)}
-            placeholder="Your age"
-          />
-          <Select
-            label="Gender"
-            value={form.complainantGender}
-            onChange={e => upd("complainantGender", e.target.value)}
-            options={["Male", "Female", "Transgender", "Prefer not to say"]}
-            placeholder="Select gender"
-          />
-          <div className="sm:col-span-2">
+      <div className="space-y-5">
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 3 — Your Details</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Complainant Details</h2>
+          <p className="text-sm text-slate-500">Auto-filled from your statement — verify and correct if needed.</p>
+        </div>
+
+        <FieldGroup title="Essential Information">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Home Address"
-              value={form.complainantAddress}
-              onChange={e => upd("complainantAddress", e.target.value)}
-              placeholder="Your residential address"
+              label="Full Name"
+              required
+              value={form.complainantName}
+              onChange={e => upd("complainantName", e.target.value)}
+              placeholder="Your full legal name"
+              helper="As it appears on your government ID"
+            />
+            <Input
+              label="Phone Number"
+              required
+              type="tel"
+              value={form.complainantPhone}
+              onChange={e => upd("complainantPhone", e.target.value)}
+              placeholder="10-digit mobile number"
+              helper="Police may contact you at this number"
             />
           </div>
-        </div>
+        </FieldGroup>
+
+        <FieldGroup title="Additional Details" optional>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Age"
+              type="number"
+              min="1" max="120"
+              value={form.complainantAge}
+              onChange={e => upd("complainantAge", e.target.value)}
+              placeholder="Your age"
+            />
+            <Select
+              label="Gender"
+              value={form.complainantGender}
+              onChange={e => upd("complainantGender", e.target.value)}
+              options={["Male", "Female", "Transgender", "Prefer not to say"]}
+              placeholder="Select gender"
+            />
+            <div className="sm:col-span-2">
+              <Input
+                label="Home Address"
+                value={form.complainantAddress}
+                onChange={e => upd("complainantAddress", e.target.value)}
+                placeholder="Your residential address"
+                helper="Street, area, city, state, PIN"
+              />
+            </div>
+          </div>
+        </FieldGroup>
       </div>
     );
 
-    /* STEP 3 — Incident & IPC */
+    /* ── STEP 3 — Incident & BNS Sections ───────────────────────── */
     if (step === 3) return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">Incident Details & BNS Sections</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Date of Incident *" type="date" value={form.incidentDate} onChange={e => upd("incidentDate", e.target.value)} />
-          <Input label="Time of Incident"   type="time" value={form.incidentTime} onChange={e => upd("incidentTime", e.target.value)} />
-          <Select
-            label="Crime Type"
-            value={form.crimeType}
-            onChange={e => upd("crimeType", e.target.value)}
-            options={CRIME_TYPES}
-            placeholder="Select crime type"
-          />
-          <Input label="Location / Area"      value={form.incidentLocation}  onChange={e => upd("incidentLocation", e.target.value)}  placeholder="Street, area, city" />
-          <Input label="Stolen / Damaged Items" value={form.stolenItems}     onChange={e => upd("stolenItems", e.target.value)}        placeholder="Items stolen or damaged" />
-          <Input label="Weapon Used (if any)" value={form.weaponUsed}        onChange={e => upd("weaponUsed", e.target.value)}         placeholder="Knife, rod, gun, etc." />
-          <Input label="Vehicle Number"       value={form.vehicleNumber}     onChange={e => upd("vehicleNumber", e.target.value)}      placeholder="TN01AB1234" />
-          <Input label="Witness Names"        value={form.witnessNames}      onChange={e => upd("witnessNames", e.target.value)}       placeholder="Names of witnesses" />
-          <div className="sm:col-span-2">
+      <div className="space-y-5">
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 4 — Incident Details</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Incident Details</h2>
+          <p className="text-sm text-slate-500">Review and edit the incident information below. Correct anything that is inaccurate.</p>
+        </div>
+
+        {/* AI extraction notice — shown when AI has populated any fields */}
+        {extractedRef.current && Object.keys(extractedRef.current).some(k => extractedRef.current[k]) && (
+          <div className="flex items-start gap-3 px-3 py-3 rounded-xl bg-purple-50 border border-purple-200">
+            <Sparkles className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-xs font-bold text-purple-800">AI extracted information from your voice statement</p>
+              <p className="text-xs text-purple-700 leading-snug">
+                Fields below may have been pre-filled. Review each field carefully and correct anything that is wrong — your edits are always saved and will never be overwritten by AI.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Essential incident fields */}
+        <FieldGroup title="When & What Happened">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Date of Incident"
+              required
+              type="date"
+              value={form.incidentDate}
+              onChange={e => upd("incidentDate", e.target.value)}
+              provenance={provenance.incidentDate}
+            />
+            <Input
+              label="Time of Incident"
+              type="time"
+              value={form.incidentTime}
+              onChange={e => upd("incidentTime", e.target.value)}
+              helper="Approximate time is fine"
+              provenance={provenance.incidentTime}
+            />
+            <Select
+              label="Crime Type"
+              value={form.crimeType}
+              onChange={e => upd("crimeType", e.target.value)}
+              options={CRIME_TYPES}
+              placeholder="Select crime type"
+            />
+            <Input
+              label="Location / Area"
+              value={form.incidentLocation}
+              onChange={e => upd("incidentLocation", e.target.value)}
+              placeholder="Street, area, city"
+              provenance={provenance.incidentLocation}
+            />
+          </div>
+          <div className="mt-4">
             <Textarea
-              label="Incident Description *"
+              label="Incident Description"
+              required
               value={form.incidentDescription}
               onChange={e => autoSuggest(e.target.value)}
               rows={5}
-              placeholder="Describe the incident in detail…"
+              placeholder="Describe what happened, in as much detail as you can remember…"
+              helper="Include what happened, who was involved, and any identifying details. Your edits here are always preserved."
+              provenance={provenance.incidentDescription}
             />
           </div>
-          <div className="sm:col-span-2">
-            <Textarea
-              label="Suspect Description"
-              value={form.suspectDescription}
-              onChange={e => upd("suspectDescription", e.target.value)}
-              rows={3}
-              placeholder="Physical appearance, clothing, age, height…"
+        </FieldGroup>
+
+        {/* Optional additional fields */}
+        <FieldGroup title="Additional Details" optional>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Stolen / Damaged Items"
+              value={form.stolenItems}
+              onChange={e => upd("stolenItems", e.target.value)}
+              placeholder="e.g. Gold chain, Mobile phone, Wallet"
+              provenance={provenance.stolenItems}
             />
-          </div>
-        </div>
-
-        {/* IPC Sections panel */}
-        {form.ipcSections.length > 0 && (
-          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-2.5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-blue-900 flex items-center gap-1.5">
-                  <Shield className="h-4 w-4 text-blue-600 shrink-0" />
-                  Potentially Relevant BNS Sections
-                </p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  AI-generated suggestion — requires police/legal verification.
-                </p>
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
-                AI Suggestion
-              </span>
+            <Input
+              label="Weapon Used"
+              value={form.weaponUsed}
+              onChange={e => upd("weaponUsed", e.target.value)}
+              placeholder="Knife, rod, gun, etc."
+            />
+            <Input
+              label="Vehicle Number"
+              value={form.vehicleNumber}
+              onChange={e => upd("vehicleNumber", e.target.value)}
+              placeholder="TN01AB1234"
+            />
+            <Input
+              label="Witness Names"
+              value={form.witnessNames}
+              onChange={e => upd("witnessNames", e.target.value)}
+              placeholder="Names of any witnesses"
+            />
+            <div className="sm:col-span-2">
+              <Textarea
+                label="Suspect Description"
+                value={form.suspectDescription}
+                onChange={e => upd("suspectDescription", e.target.value)}
+                rows={3}
+                placeholder="Physical appearance, clothing, age, height…"
+                helper="Include any identifying features you remember."
+              />
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {form.ipcSections.map(s => (
-                <span key={s} className="inline-flex items-center gap-1.5 bg-white border border-blue-300 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full shadow-2xs">
-                  BNS §{s}
-                  <button type="button" onClick={() => removeIPC(s)} className="text-blue-400 hover:text-red-500 font-bold ml-1">×</button>
-                </span>
-              ))}
-            </div>
-            {ipcValidation && (
-              <p className={`text-xs font-medium ${ipcValidation.isValid ? "text-emerald-700" : "text-amber-700"}`}>
-                {ipcValidation.isValid ? "✅ All suggested sections verified in legal database" : `⚠️ ${ipcValidation.summary}`}
-              </p>
-            )}
           </div>
-        )}
+        </FieldGroup>
 
-        {/* Manual IPC entry */}
+        {/* BNS Legal Suggestion — uses LegalSuggestionCard */}
+        <LegalSuggestionCard
+          sections={form.ipcSections}
+          legalSuggestions={form.legalSuggestions || []}
+          onRemove={removeIPC}
+          validation={ipcValidation}
+          variant="edit"
+        />
+
+        {/* Manual BNS entry */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Add BNS Section Manually</label>
+          <label className="flex items-center gap-1 text-sm font-medium text-slate-700 mb-1.5">
+            Add BNS Section Manually
+            <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 ml-1">Optional</span>
+          </label>
           <div className="flex gap-2">
             <Input
               value={ipcInput}
               onChange={e => setIpcInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && ipcInput && addIPC(ipcInput)}
               placeholder="e.g. 302, 376, 420, 498A"
+              helper="Enter a BNS section number and press Add"
             />
-            <Button variant="outline" onClick={() => ipcInput && addIPC(ipcInput)}>Add</Button>
+            <Button variant="outline" onClick={() => ipcInput && addIPC(ipcInput)} className="shrink-0">
+              Add
+            </Button>
           </div>
         </div>
       </div>
     );
 
-    /* STEP 4 — Location */
+    /* ── STEP 4 — Location ───────────────────────────────────────── */
     if (step === 4) return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">Crime Scene Location</h2>
+      <div className="space-y-5">
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 5 — Location</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Crime Scene Location</h2>
+          <p className="text-sm text-slate-500">Pinpoint where the incident occurred. GPS coordinates help route your complaint to the correct station.</p>
+        </div>
+
+        {/* Voice-described location hint */}
         {(form.nearestLandmark || form.locationLandmarks || form.locationCity) && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-1">
-            <p className="text-xs font-semibold text-blue-700">🎙️ Voice-described location — map will auto-search:</p>
-            {form.nearestLandmark   && <p className="text-sm text-blue-800">🏛️ Nearest: {form.nearestLandmark}</p>}
-            {form.locationLandmarks && <p className="text-sm text-blue-800">📌 Landmarks: {form.locationLandmarks}</p>}
-            {form.locationArea      && <p className="text-sm text-blue-800">🗺️ Area: {form.locationArea}</p>}
-            {form.locationCity      && <p className="text-sm text-blue-800">🏙️ City: {form.locationCity}</p>}
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-civic-blue-50 border border-civic-blue-200">
+            <Info className="h-4 w-4 text-civic-blue-500 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold text-civic-blue-700">Voice-described location — map will auto-search:</p>
+              {form.nearestLandmark   && <p className="text-xs text-civic-blue-800">Nearest landmark: {form.nearestLandmark}</p>}
+              {form.locationLandmarks && <p className="text-xs text-civic-blue-800">Landmarks: {form.locationLandmarks}</p>}
+              {form.locationArea      && <p className="text-xs text-civic-blue-800">Area: {form.locationArea}</p>}
+              {form.locationCity      && <p className="text-xs text-civic-blue-800">City: {form.locationCity}</p>}
+            </div>
           </div>
         )}
         <LocationCapture
@@ -807,118 +914,202 @@ export default function RecordStatement() {
       </div>
     );
 
-    /* STEP 5 — Evidence */
+    /* ── STEP 5 — Evidence ───────────────────────────────────────── */
     if (step === 5) return (
-      <div className="space-y-6">
-        <h2 className="text-xl font-bold text-gray-900">Evidence & Suspect Sketch</h2>
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+      <div className="space-y-5">
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 6 — Evidence</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Evidence &amp; Suspect Sketch</h2>
+          <p className="text-sm text-slate-500">Upload photos and optionally generate a suspect sketch. Both are optional.</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
           <PhotoUpload onPhotosUpdated={setPhotos} />
         </div>
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
           <SuspectSketch onSketchGenerated={setSketch} initialDescription={form.suspectDescription} />
         </div>
       </div>
     );
 
-    /* STEP 6 — Review & Submit */
+    /* ── STEP 6 — Review & Submit ────────────────────────────────── */
     if (step === 6) return submitted ? (
-      <div className="text-center space-y-6 py-8">
-        <div className="flex justify-center">
-          <div className="bg-green-100 rounded-full p-6">
-            <CheckCircle className="h-16 w-16 text-green-600" />
-          </div>
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">FIR Statement Submitted</h2>
-          <p className="text-gray-500 mt-1">உங்கள் புகார் பதிவு செய்யப்பட்டது · Statement Recorded Officially</p>
-          <div className="inline-block mt-3 bg-blue-50 border border-blue-200 rounded-xl px-6 py-2.5">
-            <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5">Citizen Acknowledgment / Reference ID</p>
-            <p className="text-sm font-mono font-bold text-blue-800">{firData?.submissionId || firData?.id}</p>
-          </div>
-          <p className="text-[11px] text-gray-500 mt-2">
-            Official FIR Number is assigned exclusively by jurisdictional police upon formal registration.
-          </p>
-          {!isOnline && <p className="text-xs text-amber-600 mt-2">⚠️ Saved locally — syncs when online</p>}
-        </div>
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 text-left">
-          <FIRDocument fir={firData} />
-        </div>
-
-        {/* DOCX Download — state-specific template */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 text-left">
-          <p className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            📄 Download Official State FIR (DOCX)
-          </p>
-          <FIRDownload fir={firData} location={location} />
-        </div>
-        <div className="flex gap-3 justify-center flex-wrap">
-          <Button onClick={() => navigate("/fir-history")}>View FIR History</Button>
-          <Button variant="outline" onClick={resetAll}>File Another FIR</Button>
-        </div>
-      </div>
+      /* ── Submission Success — rendered by SubmissionSummary ── */
+      <SubmissionSummary
+        firData={firData}
+        isOnline={isOnline}
+        onNavigateHistory={() => navigate("/fir-history")}
+        onFileAnother={resetAll}
+        location={location}
+        FIRDocument={FIRDocument}
+        FIRDownload={FIRDownload}
+      />
     ) : (
+      /* ── Review Dossier ── */
       <div className="space-y-5">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Review & Verify FIR Details</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            Please review each entry carefully. Badges denote the provenance source of each data point.
-          </p>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Step 7 — Review &amp; Submit</p>
+          <h2 className="text-xl font-bold text-civic-navy-900">Review Your Complaint</h2>
+          <p className="text-xs text-slate-500">Check every detail carefully before submitting. Badges show the source of each data point.</p>
         </div>
 
-        {/* Provenance Badge Legend */}
+        {/* Provenance legend */}
         <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-          <span className="font-semibold text-slate-700 mr-1">Data Source:</span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">USER-PROVIDED</span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">AI-EXTRACTED</span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 border border-slate-300">SYSTEM-GENERATED</span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">POLICE-VERIFIED</span>
+          <span className="font-semibold text-slate-600 mr-1 shrink-0">Data source:</span>
+          <ProvenanceBadge source="USER-PROVIDED" />
+          <ProvenanceBadge source="USER-EDITED" />
+          <ProvenanceBadge source="AI-EXTRACTED" />
+          <ProvenanceBadge source="SYSTEM-GENERATED" />
+          <ProvenanceBadge source="PENDING" />
         </div>
 
-        {/* Structured Field Review List with Badges */}
-        <div className="bg-white border border-gray-200 rounded-2xl divide-y text-sm overflow-hidden">
-          {[
-            { label: "Language", value: lang?.name, source: "USER-PROVIDED" },
-            { label: "Complainant Name", value: form.complainantName, source: "USER-PROVIDED" },
-            { label: "Phone Number", value: form.complainantPhone, source: "USER-PROVIDED" },
-            { label: "Age / Gender", value: [form.complainantAge, form.complainantGender].filter(Boolean).join(" / "), source: "USER-PROVIDED" },
-            { label: "Residential Address", value: form.complainantAddress, source: "USER-PROVIDED" },
-            { label: "Crime Category", value: form.crimeType, source: "AI-EXTRACTED" },
-            { label: "Incident Date", value: formatDateForDisplay(form.incidentDate), source: "AI-EXTRACTED" },
-            { label: "Incident Time", value: formatTimeForDisplay(form.incidentTime), source: "AI-EXTRACTED" },
-            { label: "Reported Location", value: form.incidentLocation, source: "AI-EXTRACTED" },
-            { label: "Nearest Landmark", value: form.locationLandmarks || form.nearestLandmark, source: "AI-EXTRACTED" },
-            { label: "GPS Coordinates", value: location ? `${location.latitude?.toFixed(5)}°N, ${location.longitude?.toFixed(5)}°E` : "Not captured", source: "SYSTEM-GENERATED" },
-            { label: "Geocoded Address", value: location?.displayName || location?.address, source: "SYSTEM-GENERATED" },
-            { label: "Stolen / Damaged", value: form.stolenItems, source: "AI-EXTRACTED" },
-            { label: "Weapon Used", value: form.weaponUsed, source: "AI-EXTRACTED" },
-            { label: "Vehicle Number", value: form.vehicleNumber, source: "AI-EXTRACTED" },
-            { label: "Witness Names", value: form.witnessNames, source: "AI-EXTRACTED" },
-            { label: "Suggested BNS Sections", value: form.ipcSections.map(s => `§${s}`).join(", ") || "None", source: "AI-EXTRACTED" },
-            { label: "Evidence Photos", value: photos.length > 0 ? `${photos.length} attached` : "None attached", source: "USER-PROVIDED" },
-            { label: "Suspect Sketch", value: sketch ? "✅ Generated & Attached" : "None provided", source: "AI-EXTRACTED" },
-            { label: "Station Jurisdiction", value: "Auto-routed to jurisdictional PS", source: "SYSTEM-GENERATED" },
-            { label: "Police Status", value: "Pending Station Verification", source: "POLICE-VERIFIED" },
-          ].map((item, idx) => item.value ? (
-            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 gap-2 hover:bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500 font-medium text-xs w-36 shrink-0">{item.label}</span>
-                <span className="text-gray-900 text-xs font-semibold break-words">{item.value}</span>
+        {/* ── Helper: resolve provenance source for a field ── */}
+        {/* (defined inline for clarity — no state mutation) */}
+
+        {/* ── Complainant Section ── */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" aria-hidden="true" /> Complainant
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {[
+              { label: "Language",      value: lang?.name,            field: null,                  fallback: "USER-PROVIDED" },
+              { label: "Full Name",     value: form.complainantName,  field: "complainantName",     fallback: "USER-PROVIDED" },
+              { label: "Phone Number", value: form.complainantPhone, field: "complainantPhone",    fallback: "USER-PROVIDED" },
+              { label: "Age / Gender", value: [form.complainantAge, form.complainantGender].filter(Boolean).join(" / "), field: "complainantAge", fallback: "USER-PROVIDED" },
+              { label: "Home Address", value: form.complainantAddress, field: "complainantAddress", fallback: "USER-PROVIDED" },
+            ].map((item, idx) => {
+              if (!item.value) return null;
+              const prov = item.field ? provenance[item.field] : null;
+              const source = prov?.editedByUser ? "USER-EDITED"
+                           : prov?.source === "AI" ? "AI-EXTRACTED"
+                           : item.fallback;
+              return (
+                <div key={idx} className="flex items-start justify-between px-4 py-3 gap-3 hover:bg-slate-50/50 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                    <p className="text-sm text-civic-navy-900 font-medium mt-0.5 break-words">{item.value}</p>
+                  </div>
+                  <ProvenanceBadge source={source} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Incident Section ── */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Shield className="h-3.5 w-3.5" aria-hidden="true" /> Incident
+            </p>
+          </div>
+          {/* Description full-width */}
+          {form.incidentDescription && (
+            <div className="px-4 py-3 border-b border-slate-100">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Your Statement</p>
+                {(() => {
+                  const prov = provenance.incidentDescription;
+                  const src = prov?.editedByUser ? "USER-EDITED" : prov?.source === "AI" ? "AI-EXTRACTED" : "USER-PROVIDED";
+                  return <ProvenanceBadge source={src} />;
+                })()}
               </div>
-              <span className={`self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${
-                item.source === "USER-PROVIDED" ? "bg-blue-50 text-blue-700 border-blue-200" :
-                item.source === "AI-EXTRACTED" ? "bg-purple-50 text-purple-700 border-purple-200" :
-                item.source === "SYSTEM-GENERATED" ? "bg-slate-100 text-slate-700 border-slate-200" :
-                "bg-amber-50 text-amber-700 border-amber-200"
-              }`}>
-                {item.source}
-              </span>
+              <p className="text-sm text-civic-navy-900 leading-relaxed whitespace-pre-line">{form.incidentDescription}</p>
             </div>
-          ) : null)}
+          )}
+          <div className="divide-y divide-slate-100">
+            {[
+              { label: "Crime Type",     value: form.crimeType,                           field: "crimeType"         },
+              { label: "Date",           value: formatDateForDisplay(form.incidentDate),   field: "incidentDate"      },
+              { label: "Time",           value: formatTimeForDisplay(form.incidentTime),   field: "incidentTime"      },
+              { label: "Location",       value: form.incidentLocation,                     field: "incidentLocation"  },
+              { label: "Stolen Items",   value: form.stolenItems,                          field: "stolenItems"       },
+              { label: "Weapon Used",    value: form.weaponUsed,                           field: "weaponUsed"        },
+              { label: "Vehicle Number", value: form.vehicleNumber,                        field: "vehicleNumber"     },
+              { label: "Witness Names",  value: form.witnessNames,                         field: "witnessNames"      },
+              { label: "Suspect",        value: form.suspectDescription,                   field: "suspectDescription" },
+            ].map((item, idx) => {
+              if (!item.value) return null;
+              const prov = item.field ? provenance[item.field] : null;
+              const source = prov?.editedByUser ? "USER-EDITED"
+                           : prov?.source === "AI" ? "AI-EXTRACTED"
+                           : "USER-PROVIDED";
+              return (
+                <div key={idx} className="flex items-start justify-between px-4 py-3 gap-3 hover:bg-slate-50/50 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                    <p className="text-sm text-civic-navy-900 font-medium mt-0.5 break-words">{item.value}</p>
+                  </div>
+                  <ProvenanceBadge source={source} />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Digital Signature Component */}
+        {/* ── Location Section ── */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" aria-hidden="true" /> Location
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {[
+              { label: "Nearest Landmark", value: form.locationLandmarks || form.nearestLandmark, source: "AI-EXTRACTED"      },
+              { label: "GPS Coordinates",  value: location ? `${location.latitude?.toFixed(5)}°N, ${location.longitude?.toFixed(5)}°E` : null, source: "SYSTEM-GENERATED" },
+              { label: "Geocoded Address", value: location?.displayName || location?.address,      source: "SYSTEM-GENERATED" },
+              { label: "Station Routing",  value: "Auto-routed to jurisdictional police station",   source: "SYSTEM-GENERATED" },
+            ].map((item, idx) => item.value ? (
+              <div key={idx} className="flex items-start justify-between px-4 py-3 gap-3 hover:bg-slate-50/50 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                  <p className="text-sm text-civic-navy-900 font-medium mt-0.5 break-words">{item.value}</p>
+                </div>
+                <ProvenanceBadge source={item.source} />
+              </div>
+            ) : null)}
+          </div>
+        </div>
+
+        {/* ── Evidence Section ── */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-[0_1px_6px_-2px_rgba(15,23,42,0.06)]">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Camera className="h-3.5 w-3.5" aria-hidden="true" /> Evidence
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {[
+              { label: "Photos",         value: photos.length > 0 ? `${photos.length} photo${photos.length !== 1 ? "s" : ""} attached` : "None attached", source: "USER-PROVIDED"    },
+              { label: "Suspect Sketch", value: sketch ? "Generated & attached" : "None provided",  source: "SYSTEM-GENERATED" },
+              { label: "Police Status",  value: "Pending station verification",                      source: "PENDING"           },
+            ].map((item, idx) => item.value ? (
+              <div key={idx} className="flex items-start justify-between px-4 py-3 gap-3 hover:bg-slate-50/50 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                  <p className="text-sm text-civic-navy-900 font-medium mt-0.5">{item.value}</p>
+                </div>
+                <ProvenanceBadge source={item.source} />
+              </div>
+            ) : null)}
+          </div>
+        </div>
+
+        {/* ── Legal Suggestion Section (review mode) ── */}
+        <LegalSuggestionCard
+          sections={form.ipcSections}
+          legalSuggestions={form.legalSuggestions || []}
+          onRemove={null}
+          validation={ipcValidation}
+          variant="review"
+        />
+
+        {/* Digital Signature */}
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Digital Signature Verification</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Digital Signature</p>
           <DigitalSignature
             label="Complainant Legal Signature"
             signerName={form.complainantName || "Complainant"}
@@ -927,104 +1118,141 @@ export default function RecordStatement() {
           />
         </div>
 
-        {/* Statutory Declaration Checkbox */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+        {/* Statutory Declaration */}
+        <div className="p-4 rounded-xl bg-slate-50 border-2 border-slate-200 space-y-2">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={declarationAgreed}
               onChange={(e) => setDeclarationAgreed(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-civic-blue-600 focus:ring-civic-blue-500 shrink-0"
+              aria-describedby="declaration-text"
             />
-            <div className="text-xs text-slate-700 leading-relaxed">
+            <div id="declaration-text" className="text-xs text-slate-700 leading-relaxed">
               <strong>Statutory Declaration:</strong> I hereby certify that the information provided above is true and correct to the best of my personal knowledge and belief. I understand that submitting false, frivolous, or vexatious information is a punishable criminal offense under <strong>Section 217 of Bharatiya Nyaya Sanhita (BNS 2023)</strong> and the <strong>Information Technology Act, 2000</strong>.
             </div>
           </label>
         </div>
 
+        {/* Offline warning */}
         {!isOnline && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
-            ⚠️ Offline — FIR saved locally, syncs automatically when network is reconnected.
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
+            <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Offline — FIR saved locally, syncs automatically when network is reconnected.
           </div>
         )}
 
         {/* Duplicate warning */}
         {duplicateWarning && (
-          <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 space-y-2">
-            <p className="text-amber-800 font-semibold text-sm">⚠️ Duplicate FIR Detected</p>
-            <p className="text-amber-700 text-xs">
-              A complaint from this phone number for the same incident date already exists
-              (ID: <strong>{duplicateWarning}</strong>). Filing a duplicate FIR may constitute
-              misuse of the system and is punishable under IPC §182 / BNS §217.
-            </p>
+          <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-amber-800 font-semibold text-sm">Duplicate FIR Detected</p>
+                <p className="text-amber-700 text-xs mt-0.5">
+                  A complaint from this phone number for the same incident date already exists
+                  (ID: <strong>{duplicateWarning}</strong>). Filing a duplicate FIR may constitute
+                  misuse of the system and is punishable under BNS §217.
+                </p>
+              </div>
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => setDupWarn(null)}
-                className="flex-1 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium">
+              <button
+                onClick={() => setDupWarn(null)}
+                className="flex-1 py-2 rounded-xl border border-amber-300 text-amber-700 text-xs font-medium transition-colors hover:bg-amber-100"
+              >
                 Cancel
               </button>
-              <button onClick={async () => { setDupWarn(null); await handleSubmit(); }}
-                className="flex-1 py-2 rounded-lg bg-amber-600 text-white text-xs font-semibold">
+              <button
+                onClick={async () => { setDupWarn(null); await handleSubmit(); }}
+                className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors"
+              >
                 File Anyway (Different Incident)
               </button>
             </div>
           </div>
         )}
 
-        <Button full size="lg" variant="success" onClick={handleSubmit} disabled={submitting || !declarationAgreed}>
+        {/* Submit button */}
+        <Button
+          full
+          size="lg"
+          variant="success"
+          onClick={handleSubmit}
+          disabled={submitting || !declarationAgreed}
+        >
           {submitting
-            ? <><span className="animate-spin">⏳</span> Submitting…</>
-            : <><CheckCircle className="h-5 w-5" /> Submit FIR Officially</>}
+            ? <><span className="inline-block animate-spin mr-1" aria-hidden="true">⏳</span> Submitting…</>
+            : <><CheckCircle className="h-5 w-5" aria-hidden="true" /> Submit Complaint Officially</>
+          }
         </Button>
 
         {!declarationAgreed && (
-          <p className="text-center text-[11px] text-slate-500">
-            * Please accept the statutory declaration above to enable submission
+          <p className="text-center text-[11px] text-slate-400">
+            Please accept the statutory declaration above to enable submission.
           </p>
         )}
       </div>
     );
   };
 
+  /* ── Page shell ──────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sticky header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-2xs">
+    <div className="min-h-screen bg-slate-50">
+
+      {/* ── Sticky header ── */}
+      <div className="bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-[0_1px_4px_0_rgba(15,23,42,0.06)]">
         <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-base font-bold text-blue-700">REPORT — New FIR</h1>
-            <p className="text-xs text-gray-400">
-              Step {step + 1}/{STEPS.length} · {isOnline ? "🟢 Online" : "🔴 Offline"}
+          {/* Brand mark */}
+          <div className="w-8 h-8 rounded-xl bg-civic-navy-900 flex items-center justify-center shrink-0 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.3)]">
+            <Shield className="h-4 w-4 text-civic-blue-400" aria-hidden="true" />
+          </div>
+          <div className="leading-none">
+            <h1 className="text-[13px] font-extrabold text-civic-navy-900 tracking-tight">REPORT — New Complaint</h1>
+            <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+              Step {step + 1} of {STEPS.length}
+              <span aria-hidden="true">·</span>
+              {isOnline
+                ? <span className="flex items-center gap-0.5 text-emerald-600"><Wifi className="h-2.5 w-2.5" aria-hidden="true" />Online</span>
+                : <span className="flex items-center gap-0.5 text-rose-600"><WifiOff className="h-2.5 w-2.5" aria-hidden="true" />Offline</span>
+              }
             </p>
           </div>
+          {/* Active language chip */}
           {lang && step > 0 && (
             <button
               type="button"
               onClick={() => setStep(0)}
               title="Click to switch statement language"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold hover:bg-blue-100 hover:border-blue-300 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-civic-blue-50 border border-civic-blue-200 text-civic-blue-800 text-xs font-semibold hover:bg-civic-blue-100 hover:border-civic-blue-300 transition-all cursor-pointer min-h-[32px]"
             >
               <span>{lang.flag || "🌐"} {lang.native}</span>
-              <span className="text-[10px] text-blue-500 font-medium">· Change</span>
+              <span className="text-[10px] text-civic-blue-500 font-medium">· Change</span>
             </button>
           )}
         </div>
+        {/* Back button — shown on mobile only; desktop uses the nav bar below */}
         <button
           onClick={() => step > 0 ? setStep(s => s - 1) : window.history.back()}
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="sm:hidden text-xs font-semibold text-slate-500 hover:text-civic-navy-900 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors min-h-[36px]"
+          aria-label="Go back"
         >
           ← Back
         </button>
       </div>
 
+      {/* ── Step progress ── */}
       <StepBar steps={STEPS} current={step} onStepClick={setStep} />
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 min-h-64">
+      {/* ── Step content ── */}
+      <div className="max-w-2xl mx-auto px-4 py-6 pb-28 sm:pb-10">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] p-5 sm:p-6 min-h-64">
           {renderStep()}
         </div>
 
+        {/* ── Desktop navigation ── */}
         {!submitted && (
-          <div className="flex items-center justify-between mt-5">
+          <div className="hidden sm:flex items-center justify-between mt-5">
             <Button
               variant="outline"
               onClick={() => setStep(s => Math.max(0, s - 1))}
@@ -1033,6 +1261,7 @@ export default function RecordStatement() {
               ← Back
             </Button>
             <div className="flex items-center gap-3">
+              {/* Save Draft */}
               <button
                 onClick={() => {
                   const draft = {
@@ -1045,19 +1274,72 @@ export default function RecordStatement() {
                   saveFIR(draft);
                   alert("Draft saved!");
                 }}
-                className="text-xs text-gray-400 hover:text-gray-600 underline"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-700 underline underline-offset-2 transition-colors"
               >
+                <Save className="h-3 w-3" aria-hidden="true" />
                 Save Draft
               </button>
               {step < STEPS.length - 1 && (
                 <Button onClick={() => setStep(s => s + 1)} disabled={!canProceed()}>
-                  Next →
+                  Next <ChevronRight className="h-4 w-4 ml-0.5" aria-hidden="true" />
                 </Button>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {/* ── Mobile sticky bottom action bar ── */}
+      {!submitted && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_-4px_rgba(15,23,42,0.10)]">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setStep(s => Math.max(0, s - 1))}
+              disabled={step === 0}
+              className="shrink-0"
+            >
+              ←
+            </Button>
+            <button
+              onClick={() => {
+                const draft = {
+                  ...form,
+                  id: generateFIRId({ isDraft: true }),
+                  language: lang?.name,
+                  status: "draft",
+                  createdAt: new Date().toISOString(),
+                };
+                saveFIR(draft);
+                alert("Draft saved!");
+              }}
+              className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-2 rounded-lg hover:bg-slate-50 transition-colors shrink-0"
+              aria-label="Save draft"
+            >
+              <Save className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="hidden xs:inline">Draft</span>
+            </button>
+            {step < STEPS.length - 1 ? (
+              <Button
+                onClick={() => setStep(s => s + 1)}
+                disabled={!canProceed()}
+                className="flex-1"
+              >
+                Continue <ChevronRight className="h-4 w-4 ml-0.5" aria-hidden="true" />
+              </Button>
+            ) : (
+              <Button
+                variant="success"
+                onClick={handleSubmit}
+                disabled={submitting || !declarationAgreed}
+                className="flex-1"
+              >
+                {submitting ? "Submitting…" : "Submit"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

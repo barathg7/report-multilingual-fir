@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, CheckCircle, AlertTriangle, Sparkles, MapPin, FileText, Wand2 } from "lucide-react";
+import { Mic, MicOff, CheckCircle, AlertTriangle, Sparkles, MapPin, FileText, Wand2, Scale } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import GroqManager from './GroqManager';
 import { calculateCompleteness } from "@/lib/firSchema";
+import { formatDateForDisplay, formatTimeForDisplay, parseItemsList, isMeaningfulValue } from "@/utils";
+import { determineBnsCandidates } from "@/utils/bnsValidator";
 
 const LANG_MAP = {
   ta:"ta-IN", hi:"hi-IN", en:"en-IN", te:"te-IN", kn:"kn-IN", ml:"ml-IN",
@@ -75,60 +77,57 @@ const BNS_DB = {
   "70":"Gang rape",
   "71":"Repeat offenders — rape",
   "38":"Unnatural offences (deleted — decriminalised by SC)",
-  // CHAPTER XVII — Offences against property
-  "303":"Theft — definition",
-  "304":"Punishment for theft",
-  "305":"Theft in dwelling house",
-  "306":"Theft by clerk or servant",
-  "307":"Theft after preparation for hurt or death",
-  "308":"Extortion — definition",
-  "309":"Punishment for extortion",
-  "310":"Putting person in fear to commit extortion",
-  "311":"Extortion by threat of death or grievous hurt",
-  "309A":"Robbery — definition",
-  "310A":"Dacoity — definition",
-  "309B":"Punishment for robbery",
-  "312":"Attempt to commit robbery",
-  "313":"Voluntarily causing hurt in committing robbery",
-  "310B":"Punishment for dacoity",
-  "311A":"Dacoity with murder",
-  "312A":"Robbery or dacoity with deadly weapon",
-  "314":"Preparation to commit dacoity",
-  "315":"Belonging to gang of dacoits",
-  "316":"Dishonest misappropriation of property",
-  "316A":"Criminal breach of trust — definition",
-  "316B":"Punishment for criminal breach of trust",
-  "316C":"Criminal breach of trust by public servant",
-  "318":"Cheating — definition",
-  "319":"Punishment for cheating",
-  "319A":"Punishment for cheating by personation",
-  "319B":"Cheating and inducing delivery of property",
-  "324":"Mischief — definition",
-  "324A":"Punishment for mischief",
-  "325":"Mischief causing damage",
-  "326":"Mischief by fire or explosive",
-  "327":"Mischief by fire destroying house",
-  "329":"Criminal trespass — definition",
-  "330":"House-trespass — definition",
-  "329A":"Punishment for criminal trespass",
-  "330A":"Punishment for house-trespass",
-  "333":"Lurking house-trespass to commit offence",
-  "336":"Lurking house-trespass or house-breaking by night",
-  // CHAPTER XVIII — Documents & property marks
-  "336A":"Forgery",
-  "336B":"Forgery for cheating",
-  "336C":"Using forged document as genuine",
+  // CHAPTER XVII — Offences against property (Bharatiya Nyaya Sanhita, 2023)
+  "303":"Theft (BNS §303)",
+  "304":"Snatching (BNS §304)",
+  "305":"Theft in dwelling house, transport, or place of worship (BNS §305)",
+  "306":"Theft by clerk or servant (BNS §306)",
+  "307":"Theft after preparation for hurt or death (BNS §307)",
+  "308":"Extortion (BNS §308)",
+  "309":"Robbery (BNS §309)",
+  "310":"Dacoity (BNS §310)",
+  "311":"Robbery or dacoity with attempt to cause death or grievous hurt (BNS §311)",
+  "312":"Attempt to commit robbery or dacoity when armed with deadly weapon (BNS §312)",
+  "313":"Voluntarily causing hurt in committing robbery (BNS §313)",
+  "314":"Dishonest misappropriation of property (BNS §314)",
+  "315":"Belonging to gang of dacoits (BNS §315)",
+  "316":"Criminal breach of trust (BNS §316)",
+  "318":"Cheating and inducing delivery of property (BNS §318)",
+  "319":"Cheating by personation (BNS §319)",
+  "324":"Mischief (BNS §324)",
+  "326":"Mischief by fire or explosive substance (BNS §326)",
+  "329":"Criminal trespass and house-trespass (BNS §329)",
+  "331":"Lurking house-trespass or house-breaking (BNS §331)",
+  "336":"Forgery (BNS §336)",
+  "338":"Forgery for purpose of cheating (BNS §338)",
+  "340":"Using as genuine a forged document (BNS §340)",
+  // Backward-compatibility aliases
+  "309B":"Robbery (BNS §309)",
+  "310B":"Dacoity (BNS §310)",
+  "316A":"Criminal breach of trust — definition (BNS §316(1))",
+  "316B":"Criminal breach of trust — punishment (BNS §316(2))",
+  "316C":"Criminal breach of trust by public servant (BNS §316(5))",
+  "319A":"Cheating by personation (BNS §319)",
+  "319B":"Cheating and inducing delivery of property (BNS §318(4))",
+  "324A":"Punishment for mischief (BNS §324(2))",
+  "325":"Mischief causing damage (BNS §324(3))",
+  "329A":"Punishment for criminal trespass (BNS §329(3))",
+  "330":"House-trespass (BNS §329(2))",
+  "330A":"Punishment for house-trespass (BNS §329(4))",
+  "336A":"Forgery (BNS §336)",
+  "336B":"Forgery for cheating (BNS §338)",
+  "336C":"Using forged document as genuine (BNS §340)",
   // CHAPTER XX — Marriage offences
-  "82":"Marrying again during lifetime of spouse",
-  "84":"Enticing or detaining married woman",
-  "85":"Husband or relative subjecting woman to cruelty (Domestic Violence)",
-  "86":"Cruelty — definition",
+  "82":"Marrying again during lifetime of spouse (BNS §82)",
+  "84":"Enticing or detaining married woman (BNS §84)",
+  "85":"Husband or relative subjecting woman to cruelty (BNS §85)",
+  "86":"Cruelty — definition (BNS §86)",
   // CHAPTER XXI — Defamation & intimidation
-  "356":"Defamation — definition",
-  "351":"Criminal intimidation — definition",
-  "352":"Intentional insult to provoke breach of peace",
-  "351B":"Punishment for criminal intimidation",
-  "79":"Word or gesture to insult modesty of woman",
+  "356":"Defamation (BNS §356)",
+  "351":"Criminal intimidation (BNS §351)",
+  "352":"Intentional insult to provoke breach of peace (BNS §352)",
+  "351B":"Criminal intimidation with threat (BNS §351(3))",
+  "79":"Word or gesture to insult modesty of woman (BNS §79)",
   // IT Act 2000 (unchanged — not replaced by BNS)
   "66C":"IT Act §66C — Identity theft",
   "66D":"IT Act §66D — Cheating by personation using computer",
@@ -158,18 +157,26 @@ function getTodayContext() {
   };
 }
 
-function toHTMLDate(ddmmyyyy) {
-  if (!ddmmyyyy || typeof ddmmyyyy !== "string") return "";
-  const parts = ddmmyyyy.split(/[\/\-]/);
+function toHTMLDate(dateStr) {
+  if (!dateStr || typeof dateStr !== "string") return "";
+  const trimmed = dateStr.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parts = trimmed.split(/[\/\-]/);
   if (parts.length !== 3) return "";
+  if (parts[0].length === 4) {
+    const [yyyy, mm, dd] = parts;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
   const [dd, mm, yyyy] = parts;
   if (!dd || !mm || !yyyy || yyyy.length !== 4) return "";
-  return `${yyyy}-${mm.padStart(2,"0")}-${dd.padStart(2,"0")}`;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
 function toHTMLTime(time12h) {
   if (!time12h || typeof time12h !== "string") return "";
-  const match = time12h.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const trimmed = time12h.trim();
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (!match) return "";
   let [, h, m, period] = match;
   h = parseInt(h, 10);
@@ -180,10 +187,13 @@ function toHTMLTime(time12h) {
 
 function normalizeExtracted(extracted) {
   if (!extracted) return extracted;
+  const rawItems = extracted.stolenItems || extracted.propertyItems || extracted.items || "";
+  const items = parseItemsList(rawItems);
   return {
     ...extracted,
-    incidentDate: toHTMLDate(extracted.incidentDate),
-    incidentTime: toHTMLTime(extracted.incidentTime),
+    incidentDate: toHTMLDate(extracted.incidentDate) || extracted.incidentDate || "",
+    incidentTime: toHTMLTime(extracted.incidentTime) || extracted.incidentTime || "",
+    stolenItems: items.length > 0 ? items.join(", ") : (typeof rawItems === "string" ? rawItems.trim() : ""),
   };
 }
 
@@ -291,11 +301,29 @@ function useVoiceCapture(language) {
   return { recording, transcript, setTranscript, dots, error, start, stop };
 }
 
-export default function VoiceRecorder({ language, onComplete }) {
+export default function VoiceRecorder({ language, onComplete, onApprove, existingForm, provenance }) {
   const [voiceStep, setVoiceStep] = useState("crime");
   const [rawTranscript, setRawTranscript] = useState("");
   const [correctedText, setCorrectedText] = useState("");
-  const [crimeExtracted, setCrimeExtracted] = useState(null);
+  const [crimeExtracted, setCrimeExtracted] = useState(() => {
+    if (existingForm && (existingForm.complainantName || existingForm.crimeType || existingForm.incidentDate || existingForm.stolenItems)) {
+      return {
+        complainantName: existingForm.complainantName,
+        complainantPhone: existingForm.complainantPhone,
+        complainantAge: existingForm.complainantAge,
+        incidentDate: existingForm.incidentDate,
+        incidentTime: existingForm.incidentTime,
+        crimeType: existingForm.crimeType,
+        incidentLocation: existingForm.incidentLocation,
+        stolenItems: existingForm.stolenItems,
+        suspectDescription: existingForm.suspectDescription,
+        weaponUsed: existingForm.weaponUsed,
+        vehicleNumber: existingForm.vehicleNumber,
+        ipcSections: existingForm.ipcSections,
+      };
+    }
+    return null;
+  });
   const [locationExtracted, setLocationExtracted] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [processingLabel, setProcessingLabel] = useState("");
@@ -314,9 +342,47 @@ export default function VoiceRecorder({ language, onComplete }) {
     groqManagerRef.current = new GroqManager();
   }, []);
 
+  // Provenance-aware resolution: manual citizen edits ALWAYS take precedence over AI suggestions
+  const isFieldEdited = (field) => Boolean(provenance?.[field]?.editedByUser);
+
+  const getEffectiveValue = (field, fallback = "") => {
+    if (isFieldEdited(field)) {
+      return existingForm?.[field] ?? fallback;
+    }
+    return crimeExtracted?.[field] || existingForm?.[field] || fallback;
+  };
+
+  const currentName = getEffectiveValue("complainantName");
+  const currentPhone = getEffectiveValue("complainantPhone");
+  const currentAge = getEffectiveValue("complainantAge");
+  const currentCrime = getEffectiveValue("crimeType");
+  const currentDate = getEffectiveValue("incidentDate");
+  const currentTime = getEffectiveValue("incidentTime");
+  const currentLocation = getEffectiveValue("incidentLocation");
+  const currentItemsRaw = getEffectiveValue("stolenItems");
+  const currentItems = parseItemsList(currentItemsRaw);
+  const currentSuspect = getEffectiveValue("suspectDescription");
+  const currentVehicle = getEffectiveValue("vehicleNumber");
+  const currentWeapon = getEffectiveValue("weaponUsed");
+
+  const currentIPC = (existingForm?.ipcSections?.length ? existingForm.ipcSections : (crimeExtracted?.ipcSections || crimeExtracted?.bnsSections)) || [];
+
+  const hasExtractedData = Boolean(
+    crimeExtracted ||
+    (existingForm && (
+      existingForm.complainantName ||
+      existingForm.crimeType ||
+      existingForm.incidentDate ||
+      existingForm.stolenItems ||
+      existingForm.incidentLocation
+    ))
+  );
+
   const hasLocationFromCrime = !!(
-    crimeExtracted?.incidentLocation ||
+    currentLocation ||
+    existingForm?.locationCity ||
     crimeExtracted?.locationCity ||
+    existingForm?.nearestLandmark ||
     crimeExtracted?.nearestLandmark
   );
 
@@ -432,9 +498,13 @@ DATE/TIME RULES:
 - incidentDate format: DD/MM/YYYY
 - incidentTime format: 12-hour with AM/PM
 
-BNS SECTIONS (Bharatiya Nyaya Sanhita 2023 — effective July 1, 2024, replaces IPC):
-- Chain snatching with force: ["309B", "304"] (Robbery + Theft)
-- Theft without confrontation: ["304"]
+BNS SECTIONS (Bharatiya Nyaya Sanhita 2023 — Act No. 45 of 2023):
+- Theft without confrontation / unattended property: ["303"]
+- Theft: ["303"]
+- Snatching (sudden, quick or forcible grab from person/possession): ["304"]
+- Robbery: ["309"]
+- Dacoity: ["310"]
+- Extortion: ["308"]
 - Assault / Hurt: ["116"] or ["118"] if dangerous weapon used
 - Grievous Hurt: ["117"] or ["119"] if dangerous weapon
 - Acid attack: ["124"]
@@ -448,20 +518,21 @@ BNS SECTIONS (Bharatiya Nyaya Sanhita 2023 — effective July 1, 2024, replaces 
 - Voyeurism: ["77"]
 - Kidnapping: ["140"]
 - Kidnapping for ransom: ["143"]
-- Robbery: ["309B"]
-- Dacoity: ["310B"]
-- Extortion: ["309"]
-- Theft: ["304"]
-- Cheating / Fraud: ["319B"]
-- Criminal breach of trust: ["316B"]
+- Cheating / Fraud: ["318"]
+- Criminal breach of trust: ["316"]
 - Domestic violence / Cruelty to wife: ["85"]
 - Dowry death: ["80"]
-- Forgery: ["336A"]
-- Criminal trespass: ["329A"]
+- Forgery: ["336"]
+- Criminal trespass: ["329"]
 - Criminal intimidation: ["351"]
 - Outrage modesty of woman: ["74"]
 - Cybercrime / Identity theft: ["66C"] (IT Act)
 - Online fraud: ["66D"] (IT Act)
+
+NO FABRICATION MANDATE:
+- DO NOT invent suspect, weapon, vehicle, CCTV, or force if not explicitly stated.
+- If property was left unattended or missing while away, it is strictly Theft ["303"], NOT Snatching ["304"].
+- Snatching ["304"] requires explicit sudden, quick, or forcible seizure from person.
 
 OUTPUT FORMAT - Return ONLY this JSON structure:
 {
@@ -479,7 +550,7 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
   "vehicleNumber": "",
   "nearestLandmark": "",
   "locationCity": "",
-  "bnsSections": [],  // Use BNS 2023 section numbers (effective July 1, 2024)
+  "bnsSections": [],  // Suggested BNS section numbers (non-authoritative)
   "ipcDetails": ""
 }`,
         },
@@ -498,6 +569,32 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
         setProcessingError("AI structured extraction failed to parse. Your spoken statement is preserved. You can edit details directly or tap Retry AI.");
         extracted = {};
       }
+
+      // Deterministic Legal Candidate Classification (Rule engine takes authority over LLM hallucination)
+      const deterministicCandidates = determineBnsCandidates({
+        description: correctedEnglish,
+        crimeType: extracted.crimeType,
+        stolenItems: extracted.stolenItems,
+      });
+
+      const finalLegalSuggestions = deterministicCandidates.length > 0
+        ? deterministicCandidates
+        : (extracted.bnsSections || []).map(sec => ({
+            act: "BNS 2023",
+            section: String(sec).replace(/^§/, "").trim(),
+            title: `BNS §${String(sec).replace(/^§/, "").trim()}`,
+            explanation: "AI legal suggestion based on statement extraction",
+            confidence: 0.70,
+            source: "AI",
+            verifiedByPolice: false,
+            verifiedByOfficerBadge: null,
+            verifiedAt: null,
+          }));
+
+      const finalSections = finalLegalSuggestions.map(s => s.section);
+      extracted.bnsSections = finalSections;
+      extracted.ipcSections = finalSections;
+      extracted.legalSuggestions = finalLegalSuggestions;
 
       setCrimeExtracted(extracted);
       
@@ -579,11 +676,12 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
 
   const approveWithCrimeOnly = () => {
     setApproved(true);
+    onApprove?.();
   };
 
   const approveWithLocation = () => {
     if (!locationExtracted) return;
-    const base = latestExtractedRef.current || {};
+    const base = latestExtractedRef.current || crimeExtracted || existingForm || {};
     const merged = {
       ...base,
       incidentLocation: locationExtracted.incidentLocation || base.incidentLocation || "",
@@ -601,6 +699,7 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
       confidence: honestScore,
       language,
     });
+    onApprove?.();
   };
 
   const Spinner = ({ label }) => (
@@ -746,58 +845,126 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
 
           {processing && <Spinner label={processingLabel} />}
 
-          {crimeExtracted && !processing && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-green-700 uppercase">✅ Extraction complete</p>
-                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">⚡ AI</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1">
-                {crimeExtracted.complainantName && <p className="text-xs text-green-800">👤 <strong>Name:</strong> {crimeExtracted.complainantName}</p>}
-                {crimeExtracted.complainantPhone && <p className="text-xs text-green-800">📞 <strong>Phone:</strong> {crimeExtracted.complainantPhone}</p>}
-                {crimeExtracted.complainantAge && <p className="text-xs text-green-800">🎂 <strong>Age:</strong> {crimeExtracted.complainantAge}</p>}
-                {crimeExtracted.incidentDate && <p className="text-xs text-green-800">📅 <strong>Date:</strong> {crimeExtracted.incidentDate}</p>}
-                {crimeExtracted.incidentTime && <p className="text-xs text-green-800">🕐 <strong>Time:</strong> {crimeExtracted.incidentTime}</p>}
-                {crimeExtracted.crimeType && <p className="text-xs text-green-800 col-span-2">🚨 <strong>Crime:</strong> {crimeExtracted.crimeType}</p>}
-                {crimeExtracted.incidentLocation && <p className="text-xs text-green-800 col-span-2">📍 <strong>Location:</strong> {crimeExtracted.incidentLocation}</p>}
+          {hasExtractedData && !processing && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3.5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-green-200/60 pb-2">
+                <p className="text-xs font-bold text-green-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                  EXTRACTION COMPLETE
+                </p>
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                  ⚡ AI
+                </span>
               </div>
 
-              {crimeExtracted.ipcSections?.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                  <p className="text-xs font-bold text-blue-800">⚖️ BNS Sections (Bharatiya Nyaya Sanhita 2023):</p>
-                  {crimeExtracted.ipcSections.map(s => (
-                    <div key={s} className="flex items-start gap-2 bg-white rounded-lg px-2 py-1 border border-blue-100 mt-1">
-                      <span className="text-xs font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full shrink-0">§{s}</span>
-                      <span className="text-xs text-gray-700">{BNS_DB[s] || "Section " + s}</span>
-                    </div>
-                  ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-green-900">
+                {isMeaningfulValue(currentName) && (
+                  <p>👤 <strong>Name:</strong> {currentName}</p>
+                )}
+                {isMeaningfulValue(currentPhone) && (
+                  <p>📞 <strong>Phone:</strong> {currentPhone}</p>
+                )}
+                {isMeaningfulValue(currentAge) && (
+                  <p>🎂 <strong>Age:</strong> {currentAge}</p>
+                )}
+                {isMeaningfulValue(currentCrime) && (
+                  <p className="sm:col-span-2">🚨 <strong>Crime:</strong> {currentCrime}</p>
+                )}
+                {isMeaningfulValue(currentDate) && (
+                  <p>📅 <strong>Date:</strong> {formatDateForDisplay(currentDate)}</p>
+                )}
+                {isMeaningfulValue(currentTime) && (
+                  <p>🕐 <strong>Time:</strong> {formatTimeForDisplay(currentTime)}</p>
+                )}
+                {isMeaningfulValue(currentLocation) && (
+                  <p className="sm:col-span-2">📍 <strong>Location:</strong> {currentLocation}</p>
+                )}
+
+                {/* Stolen / Property Items */}
+                {currentItems.length > 0 && (
+                  <div className="sm:col-span-2 pt-2 mt-1 border-t border-green-200/70">
+                    <p className="font-bold text-green-900 flex items-center gap-1 mb-1">
+                      <span>💼</span> <span>ITEMS:</span>
+                    </p>
+                    <ul className="space-y-0.5 pl-2 text-green-950 font-medium">
+                      {currentItems.map((item, idx) => (
+                        <li key={idx} className="flex items-center gap-1.5">
+                          <span className="text-green-600 font-bold">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Suspect info (only if stated) */}
+                {isMeaningfulValue(currentSuspect) && (
+                  <p className="sm:col-span-2 pt-1 border-t border-green-200/50">
+                    👤 <strong>Suspect:</strong> {currentSuspect}
+                  </p>
+                )}
+
+                {/* Vehicle info (only if stated) */}
+                {isMeaningfulValue(currentVehicle) && (
+                  <p className="sm:col-span-2 pt-1 border-t border-green-200/50">
+                    🚗 <strong>Vehicle:</strong> {currentVehicle}
+                  </p>
+                )}
+
+                {/* Weapon info (only if stated) */}
+                {isMeaningfulValue(currentWeapon) && (
+                  <p className="sm:col-span-2 pt-1 border-t border-green-200/50">
+                    🔪 <strong>Weapon:</strong> {currentWeapon}
+                  </p>
+                )}
+              </div>
+
+              {currentIPC?.length > 0 && (
+                <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-2.5 mt-2 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                      <Scale className="h-3.5 w-3.5 text-blue-700" />
+                      <span>Suggested BNS Sections</span>
+                    </p>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+                      AI Suggestion
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-700 italic">
+                    AI legal suggestion — requires police verification
+                  </p>
+                  <div className="pt-1 space-y-1">
+                    {currentIPC.map(s => {
+                      const secCode = typeof s === "object" ? s.section : String(s).replace(/^§/, "");
+                      return (
+                        <div key={secCode} className="flex items-start gap-2 bg-white rounded-lg px-2 py-1 border border-blue-100">
+                          <span className="text-xs font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full shrink-0">§{secCode}</span>
+                          <span className="text-xs text-gray-700">{BNS_DB[secCode] || "Section " + secCode}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {crimeVoice.transcript && !crimeExtracted && !processing && (
+          {crimeVoice.transcript && !hasExtractedData && !processing && (
             <Button full variant="outline" onClick={() => processCrimeStatement(crimeVoice.transcript)}>
               <Sparkles className="h-4 w-4" /> Process with AI
             </Button>
           )}
 
-          {crimeExtracted && !processing && (
+          {hasExtractedData && !processing && (
             <div className="space-y-2">
-              {hasLocationFromCrime ? (
-                <div className="flex gap-2">
-                  <Button full variant="success" onClick={approveWithCrimeOnly}>
-                    <CheckCircle className="h-4 w-4" /> Approve & Continue
-                  </Button>
-                  <Button variant="outline" onClick={() => setVoiceStep("location")} className="shrink-0 text-xs px-3">
-                    + Location
-                  </Button>
-                </div>
-              ) : (
-                <Button full onClick={() => setVoiceStep("location")}>
-                  Next: Add Location →
+              <div className="flex gap-2">
+                <Button full variant="success" onClick={approveWithCrimeOnly}>
+                  <CheckCircle className="h-4 w-4" /> Approve & Continue
                 </Button>
-              )}
+                <Button variant="outline" onClick={() => setVoiceStep("location")} className="shrink-0 text-xs px-3">
+                  {hasLocationFromCrime ? "+ Location" : "Next: Add Location →"}
+                </Button>
+              </div>
             </div>
           )}
         </div>

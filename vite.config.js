@@ -53,18 +53,17 @@ function apiDevMiddleware() {
               }
 
               const ALLOWED_MODELS = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
                 "groq/compound-mini",
                 "groq/compound",
                 "qwen/qwen3.6-27b",
                 "qwen/qwen3.8-27b",
                 "openai/gpt-oss-20b",
                 "openai/gpt-oss-120b",
-                "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
                 "mixtral-8x7b-32768",
-                "gemma-2-9b-it",
               ];
-              const model = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "groq/compound-mini";
+              const model = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "llama-3.3-70b-versatile";
               const clampedTokens = Math.min(Math.max(parseInt(maxTokens, 10) || 1200, 1), 4096);
               const clampedTemp = typeof temperature === "number" ? Math.min(Math.max(temperature, 0), 2) : 0.1;
 

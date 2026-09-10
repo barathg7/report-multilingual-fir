@@ -18,7 +18,7 @@ import { normalizeFIR } from "@/lib/firSchema";
 import { useFIRStore } from "@/hooks/useFIRStore";
 import { getNearbyStations } from "@/utils/policeStations";
 import { suggestIPCSections, validateIPCSections } from "@/utils/bnsValidator";
-import { generateFIRId, generateUUID, generateSubmissionId } from "@/utils";
+import { generateFIRId, generateUUID, generateSubmissionId, formatDateForDisplay, formatTimeForDisplay, parseItemsList } from "@/utils";
 
 const STEPS = [
   { label: "Language", icon: Mic      },
@@ -95,35 +95,7 @@ const EMPTY_FORM = {
   fullLocationDescription:"",
 };
 
-// ── ADDED: Convert YYYY-MM-DD → readable "DD MMM YYYY" for previews ──
-// form.incidentDate is stored as "YYYY-MM-DD" (HTML input format).
-// Showing it raw in the preview looks like "2026-04-01" which is ugly.
-// This helper converts it to "01 Apr 2026" for display only.
-function formatDateForDisplay(yyyymmdd) {
-  if (!yyyymmdd || typeof yyyymmdd !== "string") return yyyymmdd;
-  const parts = yyyymmdd.split("-");
-  if (parts.length !== 3) return yyyymmdd;
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const [yyyy, mm, dd] = parts;
-  const monthIdx = parseInt(mm, 10) - 1;
-  if (monthIdx < 0 || monthIdx > 11) return yyyymmdd;
-  return `${dd} ${months[monthIdx]} ${yyyy}`;
-}
-
-// ── ADDED: Convert "HH:MM" → "H:MM AM/PM" for previews ──────────────
-// form.incidentTime is stored as "19:00" (HTML input format).
-// This helper converts it to "7:00 PM" for display only.
-function formatTimeForDisplay(hhmm) {
-  if (!hhmm || typeof hhmm !== "string") return hhmm;
-  const parts = hhmm.split(":");
-  if (parts.length < 2) return hhmm;
-  let h = parseInt(parts[0], 10);
-  const m = parts[1];
-  const period = h >= 12 ? "PM" : "AM";
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  return `${h}:${m} ${period}`;
-}
+// Note: formatDateForDisplay and formatTimeForDisplay are imported from @/utils
 
 export default function RecordStatement() {
   const navigate = useNavigate();
@@ -228,6 +200,23 @@ export default function RecordStatement() {
         }
         // Rule 2: OTP-verified phone cannot be overwritten by voice extraction
         if (field === "complainantPhone" && (prov[field]?.verified || Boolean(citizenEmail))) {
+          return currentVal;
+        }
+        // Rule 3: Specialized handling for stolenItems list
+        if (field === "stolenItems") {
+          const items = parseItemsList(extractedVal);
+          if (items.length > 0) {
+            const meta = {
+              source: "AI",
+              confidence: e.confidence || 0.85,
+              editedByUser: false,
+              verified: false,
+              lastUpdated: new Date().toISOString(),
+            };
+            prov[field] = meta;
+            provenanceRef.current[field] = meta;
+            return items.join(", ");
+          }
           return currentVal;
         }
         // If extracted value is present
@@ -408,7 +397,8 @@ export default function RecordStatement() {
   // Mirrors the data-integrity rules of handleVoiceComplete:
   //  - editedByUser fields are never overwritten
   //  - only sets incidentDescription if not already user-edited
-  //  - provenance is sign_language_manual
+  //  - provenance is sign_language_experimental (verified: false)
+  //  - NEVER touches legalSuggestions, ipcSections, or BNS sections
   const handleSignConfirm = useCallback(({ text, provenance }) => {
     if (!text?.trim()) return;
     setTranscript(prev => prev ? prev + "\n\n" + text.trim() : text.trim());
@@ -577,12 +567,20 @@ export default function RecordStatement() {
             }`}
           >
             <Hand className="h-4 w-4" aria-hidden="true" />
-            <span>Sign Language</span>
+            <span>Sign Language (Experimental)</span>
           </button>
         </div>
 
         {/* ── Voice mode ── */}
-        {inputMode === "voice" && <VoiceRecorder language={lang} onComplete={handleVoiceComplete} />}
+        {inputMode === "voice" && (
+          <VoiceRecorder
+            language={lang}
+            onComplete={handleVoiceComplete}
+            onApprove={() => setStep(2)}
+            existingForm={form}
+            provenance={provenance}
+          />
+        )}
 
         {/* ── Type mode ── */}
         {inputMode === "type" && (
@@ -620,10 +618,8 @@ export default function RecordStatement() {
           />
         )}
 
-        {/* Live preview of extracted data
-            CHANGED: use formatDateForDisplay / formatTimeForDisplay so the
-            preview shows "01 Apr 2026 · 7:00 PM" instead of "2026-04-01 · 19:00" */}
-        {form.complainantName && (
+        {/* Live preview of extracted data for type / sign modes */}
+        {inputMode !== "voice" && form.complainantName && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-1">
             <p className="text-xs font-bold text-green-700 uppercase">✅ Form auto-filled — tap Next to verify</p>
             {form.complainantName  && <p className="text-sm text-green-800">👤 <strong>Name:</strong> {form.complainantName}</p>}
@@ -637,6 +633,16 @@ export default function RecordStatement() {
               </p>
             )}
             {form.incidentLocation && <p className="text-sm text-green-800">📍 <strong>Location:</strong> {form.incidentLocation}</p>}
+            {parseItemsList(form.stolenItems).length > 0 && (
+              <div className="text-sm text-green-800">
+                <p className="font-bold">💼 <strong>Items:</strong></p>
+                <ul className="list-disc list-inside pl-2 text-xs">
+                  {parseItemsList(form.stolenItems).map((it, idx) => (
+                    <li key={idx}>{it}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {form.ipcSections?.length > 0 && (
               <p className="text-sm text-green-800">⚖️ <strong>BNS:</strong> {form.ipcSections.map(s => `§${s}`).join(", ")}</p>
             )}

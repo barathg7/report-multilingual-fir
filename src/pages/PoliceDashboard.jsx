@@ -7,7 +7,7 @@ import {
   BarChart2, CheckCircle, ExternalLink, Camera, User, X,
   Phone, Calendar, Clock, Eye, AlertOctagon, Scale, ShieldCheck
 } from "lucide-react";
-import { supabase, updateFIRStatusSecure, getFIRsForStation } from "@/lib/supabaseClient";
+import { supabase, updateFIRStatusSecure, getFIRsForStation, verifyLegalSectionSecure } from "@/lib/supabaseClient";
 import { getAuthenticatedStation, clearPoliceSession } from "@/lib/policeAuth";
 import { generateAndDownloadFIRDocx } from "@/lib/firDocxGenerator";
 import { normalizeFIR, calculateCompleteness, toSupabaseRow } from "@/lib/firSchema";
@@ -102,16 +102,35 @@ function FakeFIRModal({ fir, onClose, onConfirm, loading }) {
 }
 
 // ── 3-PANE CASE REVIEW WORKSPACE MODAL ────────────────────────────────────────
-function CaseReviewModal({ fir, station, onClose, onUpdateStatus, onDownload, downloading }) {
+function CaseReviewModal({ fir, station, onClose, onUpdateStatus, onVerifySection, onDownload, downloading }) {
   const [activePhoto, setActivePhoto] = useState(null);
   const [officerNote, setOfficerNote] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [verifyingSec, setVerifyingSec] = useState(false);
+  const [customSec, setCustomSec] = useState("");
+  const [verifyMsg, setVerifyMsg] = useState(null);
 
   if (!fir) return null;
 
   const canonical = normalizeFIR(fir);
   const completeness = calculateCompleteness(canonical);
   const isFake = fir.status === "fake_fir";
+
+  const handleVerifyLegalSection = async (secToVerify) => {
+    if (!secToVerify || !fir?.id || !onVerifySection) return;
+    const clean = String(secToVerify).replace(/^§/, "").trim();
+    setVerifyingSec(true);
+    setVerifyMsg(null);
+    try {
+      await onVerifySection(fir.id, clean);
+      setVerifyMsg({ type: "success", text: `BNS §${clean} officially verified under BNSS.` });
+      setCustomSec("");
+    } catch (err) {
+      setVerifyMsg({ type: "error", text: err.message || "Verification failed." });
+    } finally {
+      setVerifyingSec(false);
+    }
+  };
 
   // Calculate distance to station
   const stationLat = station?.lat || station?.latitude;
@@ -401,27 +420,134 @@ function CaseReviewModal({ fir, station, onClose, onUpdateStatus, onDownload, do
               </p>
             </div>
 
-            {/* BNS Sections Suggestions */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-2.5">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                <Scale className="h-4 w-4 text-purple-600" />
-                <span>Suggested BNS 2023 Sections</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {canonical.legal.suggestedSections.length > 0 ? (
-                  canonical.legal.suggestedSections.map(sec => (
-                    <span key={sec} className="px-2.5 py-1 rounded-md bg-purple-50 text-purple-800 border border-purple-200 text-xs font-bold">
-                      BNS §{sec}
+            {/* Legal Verification Section */}
+            {(() => {
+              const verifiedList = Array.isArray(fir.verified_sections) && fir.verified_sections.length > 0
+                ? fir.verified_sections
+                : (Array.isArray(canonical.legal.verifiedSections) ? canonical.legal.verifiedSections : []);
+              const verifiedSecCodes = new Set(verifiedList.map(v => typeof v === "object" ? v.section : String(v)));
+
+              return (
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <Scale className="h-4 w-4 text-purple-600" />
+                      <span>Statutory Legal Sections</span>
                     </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-slate-400 italic">No specific sections flagged.</span>
-                )}
-              </div>
-              <p className="text-[10px] text-slate-400 leading-tight">
-                * Note: AI suggestions require jurisdictional Investigating Officer verification under <strong>BNSS §173</strong>.
-              </p>
-            </div>
+                    {verifiedList.length > 0 ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3" />
+                        <span>Verified by Officer</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        Unverified
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Verified Sections List */}
+                  {verifiedList.length > 0 && (
+                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-2">
+                      <p className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Authoritative Sections (Verified by Police)</span>
+                      </p>
+                      <div className="space-y-1.5">
+                        {verifiedList.map((entry, idx) => {
+                          const sec = typeof entry === "object" ? entry.section : String(entry);
+                          const act = (typeof entry === "object" && entry.act) || "BNS 2023";
+                          const badge = (typeof entry === "object" && entry.verifiedByOfficerBadge) || fir.verified_by_badge || station?.officerBadge || "OFFICER";
+                          const at = (typeof entry === "object" && entry.verifiedAt) || fir.verified_at;
+                          return (
+                            <div key={idx} className="bg-white border border-emerald-200 rounded-lg p-2 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-emerald-900">{act} §{sec}</span>
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Verified</span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-1">
+                                Verified by Officer: <strong className="text-slate-700">{badge}</strong>
+                                {at ? ` · ${new Date(at).toLocaleString("en-IN")}` : ""}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Suggestions (Unverified) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                        AI Legal Suggestions (Unverified)
+                      </p>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+                        AI Suggestion
+                      </span>
+                    </div>
+
+                    {canonical.legal.suggestedSections.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {canonical.legal.suggestedSections.map(sec => {
+                          const isAlreadyVerified = verifiedSecCodes.has(sec);
+                          return (
+                            <div key={sec} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                              <div>
+                                <span className="font-bold text-slate-800 mr-2">BNS §{sec}</span>
+                                <span className="text-[10px] text-slate-500">Preliminary candidate</span>
+                              </div>
+                              {!isAlreadyVerified && (
+                                <button
+                                  onClick={() => handleVerifyLegalSection(sec)}
+                                  disabled={verifyingSec}
+                                  className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs transition disabled:opacity-50"
+                                >
+                                  Accept & Verify
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No specific AI candidates suggested.</p>
+                    )}
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      * Note: AI suggestions require jurisdictional Investigating Officer verification under <strong>BNSS §173</strong>.
+                    </p>
+                  </div>
+
+                  {/* Officer Manual Verification / Correction */}
+                  <div className="border-t border-slate-100 pt-2.5 space-y-2">
+                    <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                      Officer Legal Section Verification / Correction
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={customSec}
+                        onChange={(e) => setCustomSec(e.target.value)}
+                        placeholder="Enter BNS § e.g. 303"
+                        className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                      <button
+                        onClick={() => handleVerifyLegalSection(customSec)}
+                        disabled={verifyingSec || !customSec.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50"
+                      >
+                        {verifyingSec ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Verify §"}
+                      </button>
+                    </div>
+                    {verifyMsg && (
+                      <p className={`text-[11px] font-medium ${verifyMsg.type === "success" ? "text-emerald-700" : "text-rose-600"}`}>
+                        {verifyMsg.text}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Official Station Officer Actions */}
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-3">

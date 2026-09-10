@@ -73,7 +73,7 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 
 | Variable | Required | Used for |
 |---|---|---|
-| `VITE_GROQ_API_KEY` | ✅ Yes | Speech-correction + FIR field/BNS-section extraction (Groq LLaMA 3.3 70B) |
+| `GROQ_API_KEY` | ✅ Yes (Server-side only) | Speech-correction + FIR field/BNS-section extraction via `/api/ai/groq` proxy (NEVER expose with `VITE_` prefix) |
 | `VITE_SUPABASE_URL` | ✅ Yes | Database — FIR storage, police-station lookup |
 | `VITE_SUPABASE_ANON_KEY` | ✅ Yes | Database — public anon key |
 | `VITE_MAPTILER_KEY` | ✅ Yes | Satellite / hybrid / street crime-scene map |
@@ -100,6 +100,43 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 | Data scope | Own session's FIRs only (privacy-scoped by `sessionId`) | Only FIRs whose `station_code` matches the logged-in station |
 | Document | Client-side `.docx` generation (no server call) | Server-side `.docx` via `POST /api/generate-fir` |
 | Extra actions | Emergency SOS button | Update status, flag Fake FIR, download official document |
+
+---
+
+## ⚠️ ISL (Indian Sign Language) Subsystem — Technical Disclosure
+
+> **IMPORTANT: Read before evaluating the sign language feature.**
+
+The REPORT application includes an experimental browser-based gesture input aid to help citizens with hearing or speech impairments provide incident descriptions. The following facts must be clearly understood:
+
+### What it IS:
+- **A rule-based geometric gesture recognizer** implemented in `src/lib/signLanguage/islGeometryClassifier.js`
+- Runs entirely in the browser using **MediaPipe Vision HandLandmarker** for 21 3D hand keypoint detection
+- Produces **geometric fit scores** (`matchScore`) based on hand landmark geometry — finger extension, spread, and orientation
+- Conservative threshold: **`matchScore >= 0.90`** required before any gesture is registered as a candidate
+- Emergency tokens (`HELP`, `POLICE`, `ACCIDENT`, `THEFT`, `STOP`) require **explicit citizen dialog confirmation** before entering the draft statement
+
+### What it is NOT:
+- ❌ **NOT** a trained, validated Indian Sign Language (ISL) recognition model
+- ❌ **NOT** a continuous ISL sentence translation system
+- ❌ **NOT** a system with validated clinical, forensic, or legal accuracy
+- ❌ **NOT** using any machine-learned weights for sign classification
+- ❌ **NOT** able to produce legal determinations, BNS section suggestions, or official FIR classifications
+
+### AI4Bharat INCLUDE-263 Evaluation (Phase 4 Audit):
+AI4Bharat's INCLUDE-263 isolated-sign classifier was evaluated for potential integration. It was **not integrated** because:
+- Required emergency vocabulary (`HELP`, `ACCIDENT`) is missing from its 263-class vocabulary
+- It has no background/`NONE` class — would produce false positives on idle or non-signing input
+- The pretrained PyTorch `.pth` checkpoint (~75MB) is too heavy for in-browser inference at MVP scale
+- It is a **discrete isolated-sign classifier**, not continuous ISL sentence translation
+- Critical sign language terms for police reporting context remain absent
+
+### Provenance:
+All text produced by the gesture recognizer is tagged with:
+```json
+{ "source": "sign_language_experimental", "verified": false }
+```
+It goes only to `incidentDescription` and **never touches** `legalSuggestions`, `ipcSections`, or BNS legal fields.
 
 ---
 

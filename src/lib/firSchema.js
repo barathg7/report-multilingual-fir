@@ -42,7 +42,7 @@ export const STATUS_COLORS = {
 // Official FIR numbers are ONLY assigned server-side by the DB RPC
 // (update_fir_status_secure) when police formally begin investigation.
 // See: supabase/migrations/20260909_phase1_2_concurrency_and_counters.sql
-import { generateSubmissionId, generateDraftId, generateUUID } from "@/utils";
+import { generateSubmissionId, generateDraftId, generateUUID } from "../utils/index.js";
 
 /**
  * Generates a citizen acknowledgment / reference ID for a new complaint submission.
@@ -201,7 +201,9 @@ export function normalizeFIR(raw = {}) {
 
   const evidence = {
     photos,
-    stolenItems: (raw.evidence?.stolenItems ?? raw.stolen_items ?? raw.stolenItems ?? "").trim(),
+    stolenItems: Array.isArray(raw.evidence?.stolenItems ?? raw.stolen_items ?? raw.stolenItems)
+      ? (raw.evidence?.stolenItems ?? raw.stolen_items ?? raw.stolenItems).filter(Boolean).map(s => String(s).trim()).join(", ")
+      : String(raw.evidence?.stolenItems ?? raw.stolen_items ?? raw.stolenItems ?? "").trim(),
     weaponUsed: (raw.evidence?.weaponUsed ?? raw.weapon_used ?? raw.weaponUsed ?? "").trim(),
     vehicleNumber: (raw.evidence?.vehicleNumber ?? raw.vehicle_number ?? raw.vehicleNumber ?? "").trim(),
     sketchUrl: (raw.evidence?.sketchUrl ?? raw.suspect_sketch_url ?? raw.suspectSketchUrl ?? raw.sketch?.url ?? "").trim(),
@@ -214,6 +216,7 @@ export function normalizeFIR(raw = {}) {
   if (Array.isArray(rawSuggestions) && rawSuggestions.length > 0) {
     canonicalSuggestions = rawSuggestions.map(s => {
       if (typeof s === "object" && s.section) {
+        const isOfficerAction = raw.status === "verified" || raw.status === "investigating";
         return {
           act: s.act || "BNS 2023",
           section: String(s.section).replace(/^§/, "").trim(),
@@ -221,9 +224,9 @@ export function normalizeFIR(raw = {}) {
           explanation: s.explanation || "",
           confidence: typeof s.confidence === "number" ? s.confidence : 0.85,
           source: s.source || "AI",
-          verifiedByPolice: Boolean(s.verifiedByPolice),
-          verifiedByOfficerBadge: s.verifiedByOfficerBadge || null,
-          verifiedAt: s.verifiedAt || null,
+          verifiedByPolice: Boolean(s.verifiedByPolice) && isOfficerAction,
+          verifiedByOfficerBadge: isOfficerAction ? (s.verifiedByOfficerBadge || null) : null,
+          verifiedAt: isOfficerAction ? (s.verifiedAt || null) : null,
         };
       }
       return null;
@@ -247,14 +250,15 @@ export function normalizeFIR(raw = {}) {
 
   const sections = canonicalSuggestions.map(s => s.section);
 
+  const isOfficerVerified = raw.status === "verified" || raw.status === "investigating";
   const legal = {
     legalSuggestions: canonicalSuggestions,
     suggestedSections: sections,
     ipcSections: sections,
-    verifiedSections: Array.isArray(raw.legal?.verifiedSections ?? raw.verified_sections)
+    verifiedSections: isOfficerVerified && Array.isArray(raw.legal?.verifiedSections ?? raw.verified_sections)
       ? (raw.legal?.verifiedSections ?? raw.verified_sections)
       : [],
-    isVerifiedByPolice: Boolean(raw.legal?.isVerifiedByPolice ?? (raw.status === "verified")),
+    isVerifiedByPolice: Boolean(raw.legal?.isVerifiedByPolice) && isOfficerVerified,
     legalCategory: raw.legal?.legalCategory ?? "",
   };
 

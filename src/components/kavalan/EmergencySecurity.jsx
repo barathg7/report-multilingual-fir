@@ -2,7 +2,7 @@
 // FIX: Edge Function expects { to, message } — was sending { to, body }
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { getNearestPoliceStations } from "../../lib/findNearestStation";
+import { getNearestPoliceStations, isValidDispatchPhone } from "../../lib/findNearestStation";
 
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -103,10 +103,9 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       const mapsUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
       const timeStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
-      setStatusMsg(`Sending SOS to ${stations.length} nearest station${stations.length > 1 ? "s" : ""}…`);
+      setStatusMsg(`Checking dispatch lines for ${stations.length} nearest station${stations.length > 1 ? "s" : ""}…`);
 
       const smsPromises = stations.map(async (station, idx) => {
-        // FIX: field name is "message" to match Edge Function
         const message =
           `🚨 SOS ALERT [${idx + 1}/${stations.length}] - Need immediate help!\n` +
           `Nearest Station: ${station.station_name} (${station.station_code})\n` +
@@ -116,7 +115,14 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
           `Map: ${mapsUrl}\n` +
           `Time: ${timeStr}`;
 
-        if (!station.phonenumber) return { station, sent: false, error: "No phone number" };
+        // Rule 2: Strict phone validation before dispatching to Edge Function
+        if (!isValidDispatchPhone(station.phonenumber)) {
+          return {
+            station,
+            sent: false,
+            error: "Station dispatch number not configured",
+          };
+        }
 
         try {
           await sendSOSviaEdgeFunction(station.phonenumber, message);
@@ -129,6 +135,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       const smsResults = await Promise.all(smsPromises);
       setResults(smsResults);
       const sentCount = smsResults.filter(r => r.sent).length;
+      const allUnconfigured = smsResults.every(r => !isValidDispatchPhone(r.station.phonenumber));
 
       stopSiren();
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -136,6 +143,11 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       if (sentCount > 0) {
         setStatus("success");
         setStatusMsg(`SOS sent to ${sentCount} of ${stations.length} station${stations.length > 1 ? "s" : ""}`);
+        setRetryable(false);
+      } else if (allUnconfigured) {
+        setStatus("error");
+        setStatusMsg("SMS dispatch is currently unavailable for nearby stations.\nCall 100 directly for immediate emergency response.");
+        setRetryable(false);
       } else {
         setStatus("error");
         setStatusMsg("SMS failed for all stations. Call 100 directly.");
@@ -197,6 +209,17 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
             </div>
           )}
 
+          {/* Prominent Call 100 Button shown when SMS is unavailable or failed */}
+          {(status === "error" || (results.length > 0 && results.every(r => !r.sent))) && (
+            <a
+              href="tel:100"
+              className="flex items-center justify-center gap-2.5 w-full rounded-2xl bg-red-600 hover:bg-red-700 active:scale-95 text-white py-3.5 font-bold text-base shadow-lg shadow-red-600/30 transition-all text-center no-underline cursor-pointer"
+            >
+              <span className="text-xl">📞</span>
+              <span>Call 100 Directly</span>
+            </a>
+          )}
+
           <div className="flex gap-3">
             {!sosActive ? (
               <button onClick={sendSOS} disabled={sending} className="flex-1 rounded-2xl bg-red-700 hover:bg-red-800 active:scale-95 text-white py-3.5 font-bold text-sm disabled:opacity-60 transition-all">
@@ -214,30 +237,42 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
 
           {results.length > 0 && (
             <div className="space-y-2">
-              {results.map(({ station, sent, error }, idx) => (
-                <div key={station.station_code} className={`rounded-2xl border p-3.5 text-sm ${sent ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className={`font-bold text-sm ${sent ? "text-green-800" : "text-red-700"}`}>
-                      {sent ? "✅" : "❌"} #{idx + 1} — {station.station_name}
+              {results.map(({ station, sent, error }, idx) => {
+                const hasValidPhone = isValidDispatchPhone(station.phonenumber);
+                return (
+                  <div key={station.station_code} className={`rounded-2xl border p-3.5 text-sm ${sent ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className={`font-bold text-sm ${sent ? "text-green-800" : "text-red-700"}`}>
+                        {sent ? "✅" : "❌"} #{idx + 1} — {station.station_name}
+                      </p>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sent ? "bg-green-200 text-green-800" : "bg-red-200 text-red-700"}`}>
+                        {station.distance_km.toFixed(1)} km
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      {station.district ? `${station.district} · ` : ""}
+                      {hasValidPhone ? station.phonenumber : "Station SMS: Not configured"}
                     </p>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sent ? "bg-green-200 text-green-800" : "bg-red-200 text-red-700"}`}>
-                      {station.distance_km.toFixed(1)} km
-                    </span>
+                    {!sent && (
+                      <p className="text-xs text-red-700 font-medium mt-1">
+                        ⚠️ {!hasValidPhone ? "SMS unavailable — station dispatch number not configured" : error}
+                      </p>
+                    )}
+                    {sent && loc && (
+                      <a href={`https://www.google.com/maps?q=${loc.lat},${loc.lng}`} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5 text-xs text-green-700 underline">
+                        View location on Maps →
+                      </a>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-600">{station.district} · {station.phonenumber || "No phone"}</p>
-                  {error && <p className="text-xs text-red-600 mt-1">⚠️ {error}</p>}
-                  {sent && loc && (
-                    <a href={`https://www.google.com/maps?q=${loc.lat},${loc.lng}`} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5 text-xs text-green-700 underline">
-                      View location on Maps →
-                    </a>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               {loc && <p className="text-center text-xs text-gray-400">📍 {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}{loc.accuracy ? ` (±${Math.round(loc.accuracy)} m)` : ""}</p>}
             </div>
           )}
 
-          <p className="text-center text-gray-400 text-xs">If SMS fails, call <span className="font-bold text-gray-600">100</span> directly</p>
+          <p className="text-center text-gray-400 text-xs">
+            Always call <a href="tel:100" className="font-bold text-red-600 underline">100</a> directly in an emergency
+          </p>
         </div>
       </div>
     </div>

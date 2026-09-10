@@ -15,20 +15,12 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+import { normalizeStationPhone, isValidDispatchPhone, normalizeStationRecord } from "../utils/phoneValidation.js";
+export { normalizeStationPhone, isValidDispatchPhone, normalizeStationRecord };
+
 // Normalize any station shape → unified object
-function normalize(s, distanceKm) {
-  return {
-    id:           s.id,
-    station_code: s.station_code ?? s.code ?? s.id,
-    station_name: s.station_name ?? s.name,
-    district:     s.district ?? "",
-    state:        s.state ?? "",
-    lat:          Number(s.latitude ?? s.lat),
-    lng:          Number(s.longitude ?? s.lng),
-    radius_km:    Number(s.radius_km ?? 0),
-    phonenumber:  s.phone_number ?? s.phonenumber ?? s.phone ?? "",
-    distance_km:  distanceKm,
-  };
+export function normalize(s, distanceKm) {
+  return normalizeStationRecord(s, distanceKm);
 }
 
 // Rank all stations by distance, return top N

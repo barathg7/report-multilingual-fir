@@ -333,14 +333,24 @@ runTest("TEST 10: UI components guarantee truthful delivery status (no hardcoded
   );
   const fileContent = fs.readFileSync(emergencyComponentPath, "utf-8");
 
-  // Verify button text requirements:
+  // Verify button text and explicit truthful section requirements:
   assert.match(fileContent, /"Share SOS"/);
+  assert.match(fileContent, /"Open SMS"/);
   assert.match(fileContent, /"Open SMS to SOS Contact"/);
   assert.match(fileContent, /Your phone's Messages app will open\. Review and tap Send\./);
+  assert.match(fileContent, /AUTOMATIC POLICE ALERT/);
+  assert.match(fileContent, /SOS alert delivered to police dashboard/);
+  assert.match(fileContent, /EMERGENCY CONTACT SMS/);
+  assert.match(fileContent, /6 contacts configured/);
+  assert.match(fileContent, /SMS draft opened\. Tap Send on your phone\./);
+  assert.match(fileContent, /Share sheet opened\. Delivery depends on the selected messaging app\./);
 
-  // Verify that "SMS sent" is NOT used as hardcoded button or state text
+  // Verify that deceptive delivery strings are NEVER used
   assert.doesNotMatch(fileContent, />\s*SMS sent\s*</i);
   assert.doesNotMatch(fileContent, /"SMS sent"/i);
+  assert.doesNotMatch(fileContent, /"SMS delivered"/i);
+  assert.doesNotMatch(fileContent, /"Sent successfully"/i);
+  assert.doesNotMatch(fileContent, /"Message delivered"/i);
 
   // Verify 13 discrete state names exist in the component state definition
   const requiredStates = [

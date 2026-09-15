@@ -15,6 +15,10 @@ import {
 } from "../src/config/sosRecipients.js";
 
 import {
+  buildNativeSmsUri
+} from "../src/lib/sosClient.js";
+
+import {
   isValidDispatchPhone,
   normalizeStationPhone
 } from "../src/utils/phoneValidation.js";
@@ -128,113 +132,118 @@ runTest("TEST 5: Arbitrary unconfigured numbers are strictly rejected by recipie
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 6 — All six recipients are attempted during dispatch
+// TEST 6 — All six recipients are prepared for user-assisted SMS drafting
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 6: SOS dispatch attempts all six configured recipients concurrently", async () => {
-  const attempted = [];
-  const mockDispatch = async (recipient) => {
-    attempted.push(recipient);
-    return { success: true, sid: `SM_${recipient.slice(-4)}` };
-  };
-
-  const results = await Promise.all(
-    AUTHORIZED_SOS_RECIPIENTS.map(async (phone) => {
-      const resp = await mockDispatch(phone);
-      return { phone, sent: resp.success, error: null };
-    })
+runTest("TEST 6: All six configured recipients are prepared for user-assisted SMS drafting", () => {
+  assert.equal(AUTHORIZED_SOS_RECIPIENTS.length, 6);
+  const uris = AUTHORIZED_SOS_RECIPIENTS.map((phone) =>
+    buildNativeSmsUri(phone, "SOS — immediate assistance requested.")
   );
-
-  assert.equal(attempted.length, 6);
-  assert.deepEqual(attempted, [...AUTHORIZED_SOS_RECIPIENTS]);
-  assert.equal(results.length, 6);
+  assert.equal(uris.length, 6);
+  for (let i = 0; i < 6; i++) {
+    assert.ok(uris[i].startsWith(`sms:${AUTHORIZED_SOS_RECIPIENTS[i]}?body=`));
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 7 — Successful recipients are marked SENT
+// TEST 7 — Native SMS opening is never classified as delivered
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 7: Provider success marks recipient as SENT (✓ Sent)", async () => {
-  const mockProvider = async (recipient) => ({ success: true, sid: "SM12345" });
-
-  const record = await (async () => {
-    const phone = AUTHORIZED_SOS_RECIPIENTS[0];
-    const resp = await mockProvider(phone);
+runTest("TEST 7: Native SMS opening is never classified as delivered (remains unconfirmed draft)", () => {
+  // Simulating user clicking Open SMS on any configured contact:
+  // Must update status truthfully without claiming SMS sent or delivered
+  const handleOpenSms = (phone) => {
     return {
       phone,
-      masked: maskPhoneNumber(phone),
-      sent: resp.success,
-      error: null,
-      sid: resp.sid
+      action: "open_sms",
+      status: "SMS draft opened. Tap Send on your phone.",
+      smsNotice: "SMS prepared — tap Send in your messaging app",
+      delivered: false,
+      sent: false,
     };
-  })();
+  };
 
-  assert.equal(record.sent, true);
-  assert.equal(record.error, null);
-  assert.equal(record.sid, "SM12345");
-  const badgeText = record.sent ? "✓ Sent" : "⚠ Failed";
-  assert.equal(badgeText, "✓ Sent");
+  for (const phone of AUTHORIZED_SOS_RECIPIENTS) {
+    const state = handleOpenSms(phone);
+    assert.equal(state.delivered, false, "Delivery must never be assumed when launching native SMS");
+    assert.equal(state.sent, false, "Sent status must never be asserted without carrier confirmation");
+    assert.equal(state.status, "SMS draft opened. Tap Send on your phone.");
+    assert.doesNotMatch(state.status, /SMS sent/i);
+    assert.doesNotMatch(state.status, /SMS delivered/i);
+    assert.doesNotMatch(state.status, /Sent successfully/i);
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 8 — Failed recipients are marked FAILED
+// TEST 8 — Web Share success is classified as "handed to share target", not SMS delivery
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 8: Provider rejection marks recipient as FAILED (⚠ Failed) without faking", async () => {
-  const mockProvider = async (recipient) => {
-    throw new Error("Twilio Error 21608: The number is unverified");
-  };
-
-  const record = await (async () => {
-    const phone = AUTHORIZED_SOS_RECIPIENTS[1];
-    try {
-      await mockProvider(phone);
-      return { phone, sent: true, error: null };
-    } catch (err) {
-      return { phone, sent: false, error: err.message };
+runTest("TEST 8: Web Share success is classified as 'handed to share target', not SMS delivery", () => {
+  const handleShareResult = (shareSuccessful) => {
+    if (shareSuccessful) {
+      return {
+        type: "web_share",
+        status: "Share sheet opened. Delivery depends on the selected messaging app.",
+        delivered: false,
+        sent: false,
+      };
     }
-  })();
+    return {
+      type: "web_share",
+      status: "Share sheet dismissed",
+      delivered: false,
+      sent: false,
+    };
+  };
 
-  assert.equal(record.sent, false);
-  assert.match(record.error, /Twilio Error 21608/);
-  const badgeText = record.sent ? "✓ Sent" : "⚠ Failed";
-  assert.equal(badgeText, "⚠ Failed");
+  const result = handleShareResult(true);
+  assert.equal(result.delivered, false);
+  assert.equal(result.sent, false);
+  assert.equal(result.status, "Share sheet opened. Delivery depends on the selected messaging app.");
+  assert.doesNotMatch(result.status, /SMS sent/i);
+  assert.doesNotMatch(result.status, /SMS delivered/i);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 9 — Retry only targets failed recipients
+// TEST 9 — Supabase SOS insert success is classified as police alert success
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 9: Retry exclusively targets failed recipients and never resends succeeded ones", async () => {
-  // Initial results: 4 succeeded, 2 failed
-  const initialResults = [
-    { phone: "+918428077014", sent: true, error: null },
-    { phone: "+916382586270", sent: true, error: null },
-    { phone: "+918122319636", sent: false, error: "Carrier temporary failure" },
-    { phone: "+919487304237", sent: true, error: null },
-    { phone: "+919047461987", sent: false, error: "Carrier temporary failure" },
-    { phone: "+916374763637", sent: true, error: null }
-  ];
-
-  const retryCalls = [];
-  const mockRetrySender = async (phone) => {
-    retryCalls.push(phone);
-    return { success: true, sid: `SM_RETRY_${phone.slice(-4)}` };
+runTest("TEST 9: Supabase SOS insert success is classified as police alert success", () => {
+  const handleRecordCreation = (record) => {
+    if (record && !record._local_only && record._supabase_inserted !== false) {
+      return {
+        sosState: "POLICE ALERTED",
+        statusMessage: "SOS alert sent to the jurisdictional police dashboard",
+        policeAlertDelivered: true,
+      };
+    }
+    return {
+      sosState: "NETWORK FAILURE",
+      statusMessage: "Could not connect to police dashboard. SOS stored locally. Use Call 112 directly.",
+      policeAlertDelivered: false,
+    };
   };
 
-  // Perform selective retry
-  const failedItems = initialResults.filter(r => !r.sent);
-  assert.equal(failedItems.length, 2, "Only 2 failed items should be targeted for retry");
+  const cloudRecord = {
+    id: "sos-test-uuid",
+    nearest_station_code: "TN-CHN-001",
+    _supabase_inserted: true,
+    _local_only: false,
+  };
 
-  const retryUpdates = await Promise.all(failedItems.map(async (item) => {
-    const resp = await mockRetrySender(item.phone);
-    return { ...item, sent: resp.success, error: null };
-  }));
+  const localRecord = {
+    id: "sos-test-local",
+    nearest_station_code: "TN-CHN-001",
+    _supabase_inserted: false,
+    _local_only: true,
+  };
 
-  assert.deepEqual(retryCalls, ["+918122319636", "+919047461987"]);
+  const cloudResult = handleRecordCreation(cloudRecord);
+  assert.equal(cloudResult.sosState, "POLICE ALERTED");
+  assert.equal(cloudResult.statusMessage, "SOS alert sent to the jurisdictional police dashboard");
+  assert.equal(cloudResult.policeAlertDelivered, true);
 
-  // Merge back
-  const updateMap = new Map(retryUpdates.map(u => [u.phone, u]));
-  const finalResults = initialResults.map(r => updateMap.get(r.phone) || r);
-
-  assert.equal(finalResults.every(r => r.sent), true, "All 6 items should now be marked sent");
-  assert.equal(finalResults.length, 6);
+  const localResult = handleRecordCreation(localRecord);
+  assert.equal(localResult.sosState, "NETWORK FAILURE");
+  assert.equal(localResult.policeAlertDelivered, false);
+  assert.match(localResult.statusMessage, /Could not connect to police dashboard/);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,95 +270,50 @@ runTest("TEST 10: Phone numbers are masked in UI showing only country code and l
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 11 — Zero successful sends -> Call 100 fallback
+// TEST 11 — Configured contact numbers remain present, immutable, and normalized
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 11: Zero successful SMS dispatches displays Call 100 fallback message", () => {
-  const results = AUTHORIZED_SOS_RECIPIENTS.map(phone => ({
-    phone,
-    sent: false,
-    error: "Twilio unverified number in trial account"
-  }));
-
-  const sentCount = results.filter(r => r.sent).length;
-  assert.equal(sentCount, 0);
-
-  let statusMsg = "";
-  let status = "idle";
-  if (sentCount === 6) {
-    status = "success";
-    statusMsg = `Emergency alert sent to ${sentCount} of 6 contacts.`;
-  } else if (sentCount > 0) {
-    status = "partial";
-    statusMsg = `Emergency alert sent to ${sentCount} of 6 contacts.`;
-  } else {
-    status = "error";
-    statusMsg = "SMS delivery unavailable. Call 100 directly.";
+runTest("TEST 11: Configured contact numbers remain present, immutable, and normalized", () => {
+  assert.equal(AUTHORIZED_SOS_RECIPIENTS.length, 6);
+  for (const phone of AUTHORIZED_SOS_RECIPIENTS) {
+    assert.match(phone, /^\+91\d{10}$/);
+    assert.equal(isValidDispatchPhone(phone), true);
   }
-
-  assert.equal(status, "error");
-  assert.equal(statusMsg, "SMS delivery unavailable. Call 100 directly.");
+  assert.ok(Object.isFrozen(AUTHORIZED_SOS_RECIPIENTS));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 12 — Partial success -> correct sent count
+// TEST 12 — No UI string claims SMS delivery without provider confirmation
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 12: Partial success (4 of 6) displays correct sent count summary", () => {
-  const results = [
-    { sent: true }, { sent: true }, { sent: false },
-    { sent: true }, { sent: false }, { sent: true }
-  ];
+runTest("TEST 12: No UI string in EmergencySecurity.jsx claims SMS delivery without provider confirmation", () => {
+  const componentPath = path.join(projectRoot, "src", "components", "kavalan", "EmergencySecurity.jsx");
+  const content = fs.readFileSync(componentPath, "utf-8");
 
-  const sentCount = results.filter(r => r.sent).length;
-  const total = results.length;
-  assert.equal(sentCount, 4);
-
-  let statusMsg = "";
-  let status = "idle";
-  if (sentCount === total) {
-    status = "success";
-    statusMsg = `Emergency alert sent to ${sentCount} of ${total} contacts.`;
-  } else if (sentCount > 0) {
-    status = "partial";
-    statusMsg = `Emergency alert sent to ${sentCount} of ${total} contacts.`;
-  } else {
-    status = "error";
-    statusMsg = "SMS delivery unavailable. Call 100 directly.";
-  }
-
-  assert.equal(status, "partial");
-  assert.equal(statusMsg, "Emergency alert sent to 4 of 6 contacts.");
+  // Prohibited deceptive delivery phrases
+  assert.doesNotMatch(content, /["'`]\s*SMS sent\s*["'`]/i);
+  assert.doesNotMatch(content, /["'`]\s*SMS delivered\s*["'`]/i);
+  assert.doesNotMatch(content, /["'`]\s*Sent successfully\s*["'`]/i);
+  assert.doesNotMatch(content, /["'`]\s*Message delivered\s*["'`]/i);
+  assert.doesNotMatch(content, />\s*SMS sent\s*</i);
+  assert.doesNotMatch(content, />\s*SMS delivered\s*</i);
+  assert.doesNotMatch(content, />\s*Sent successfully\s*</i);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 13 — Full success -> correct sent count
+// TEST 13 — Emergency contacts UI section explicitly states draft opening
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 13: Full success (6 of 6) displays correct sent count summary and disables retry", () => {
-  const results = AUTHORIZED_SOS_RECIPIENTS.map(() => ({ sent: true }));
-  const sentCount = results.filter(r => r.sent).length;
-  const total = results.length;
-  assert.equal(sentCount, 6);
+runTest("TEST 13: Emergency contacts UI section explicitly states draft opening and 6 contacts configured", () => {
+  const componentPath = path.join(projectRoot, "src", "components", "kavalan", "EmergencySecurity.jsx");
+  const content = fs.readFileSync(componentPath, "utf-8");
 
-  let statusMsg = "";
-  let status = "idle";
-  let retryable = false;
-
-  if (sentCount === total) {
-    status = "success";
-    statusMsg = `Emergency alert sent to ${sentCount} of ${total} contacts.`;
-    retryable = false;
-  } else if (sentCount > 0) {
-    status = "partial";
-    statusMsg = `Emergency alert sent to ${sentCount} of ${total} contacts.`;
-    retryable = true;
-  } else {
-    status = "error";
-    statusMsg = "SMS delivery unavailable. Call 100 directly.";
-    retryable = true;
-  }
-
-  assert.equal(status, "success");
-  assert.equal(statusMsg, "Emergency alert sent to 6 of 6 contacts.");
-  assert.equal(retryable, false);
+  assert.match(content, /AUTOMATIC POLICE ALERT/);
+  assert.match(content, /SOS alert delivered to police dashboard/);
+  assert.match(content, /Location shared/);
+  assert.match(content, /Nearest station identified/);
+  assert.match(content, /EMERGENCY CONTACT SMS/);
+  assert.match(content, /6 contacts configured/);
+  assert.match(content, /"Open SMS"/);
+  assert.match(content, /SMS draft opened\. Tap Send on your phone\./);
+  assert.match(content, /Share sheet opened\. Delivery depends on the selected messaging app\./);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

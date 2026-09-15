@@ -58,6 +58,9 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
   const [copiedToast, setCopiedToast] = useState(false);
   const [isSirenPlaying, setIsSirenPlaying] = useState(false);
   const [selectedRecipientIdx, setSelectedRecipientIdx] = useState(0);
+  const [shareNotice, setShareNotice] = useState("");
+  const [smsNotice, setSmsNotice] = useState("");
+  const [openedSmsContacts, setOpenedSmsContacts] = useState({});
 
   const audioCtxRef = useRef(null);
   const sirenIntervalRef = useRef(null);
@@ -123,6 +126,9 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       setSosRecord(null);
       setStatusMessage("");
       setCopiedToast(false);
+      setShareNotice("");
+      setSmsNotice("");
+      setOpenedSmsContacts({});
     }
     return () => {
       isMountedRef.current = false;
@@ -213,24 +219,29 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
 
         if (isMountedRef.current && record) {
           setSosRecord(record);
-          setSosState(SOS_STATES.POLICE_ALERTED);
-          setStatusMessage("Realtime emergency signal transmitted to nearest police command post.");
+          if (!record._local_only && record._supabase_inserted !== false) {
+            setSosState(SOS_STATES.POLICE_ALERTED);
+            setStatusMessage("SOS alert sent to the jurisdictional police dashboard");
 
-          // Subscribe to live status updates on this record
-          if (record.id) {
-            if (realtimeSubRef.current) realtimeSubRef.current.unsubscribe();
-            realtimeSubRef.current = subscribeToCitizenSOS(record.id, (updated) => {
-              if (!isMountedRef.current) return;
-              if (updated.status === "acknowledged") {
-                setSosState(SOS_STATES.ACKNOWLEDGED);
-                setStatusMessage("Police Command acknowledged your SOS. Officers have been alerted.");
-                stopSiren();
-              } else if (updated.status === "resolved") {
-                setSosState(SOS_STATES.RESOLVED);
-                setStatusMessage("Emergency incident marked resolved by station personnel.");
-                stopSiren();
-              }
-            });
+            // Subscribe to live status updates on this record
+            if (record.id) {
+              if (realtimeSubRef.current) realtimeSubRef.current.unsubscribe();
+              realtimeSubRef.current = subscribeToCitizenSOS(record.id, (updated) => {
+                if (!isMountedRef.current) return;
+                if (updated.status === "acknowledged") {
+                  setSosState(SOS_STATES.ACKNOWLEDGED);
+                  setStatusMessage("Police Command acknowledged your SOS. Officers have been alerted.");
+                  stopSiren();
+                } else if (updated.status === "resolved") {
+                  setSosState(SOS_STATES.RESOLVED);
+                  setStatusMessage("Emergency incident marked resolved by station personnel.");
+                  stopSiren();
+                }
+              });
+            }
+          } else {
+            setSosState(SOS_STATES.NETWORK_FAILURE);
+            setStatusMessage("Could not connect to police dashboard. SOS stored locally. Use Call 112 directly.");
           }
         }
       } catch (netErr) {
@@ -261,6 +272,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
           text: shareText,
           url: mapsUrl,
         });
+        setShareNotice("Share sheet opened. Delivery depends on the selected messaging app.");
         return;
       } catch (err) {
         // User cancelled share or share failed; fallback to clipboard
@@ -271,6 +283,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
     // Clipboard fallback
     try {
       await navigator.clipboard.writeText(shareText);
+      setShareNotice("Emergency alert copied to clipboard. Paste into your messaging app.");
       setCopiedToast(true);
       setTimeout(() => {
         if (isMountedRef.current) setCopiedToast(false);
@@ -283,6 +296,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
+      setShareNotice("Emergency alert copied to clipboard. Paste into your messaging app.");
       setCopiedToast(true);
       setTimeout(() => {
         if (isMountedRef.current) setCopiedToast(false);
@@ -385,7 +399,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
             </a>
           </div>
           <p className="text-[11px] text-center text-slate-400 font-medium -mt-2">
-            Direct telephonic emergency call · Requires explicit user action
+            Launches device dialer — call connection requires explicit action on your phone.
           </p>
 
           {/* 3D Dimensional Beacon & Radar Section */}
@@ -585,57 +599,161 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
               <p className="text-[10px] text-center text-slate-400">
                 Broadcasts via phone share sheet or copies preformatted GPS alert to clipboard.
               </p>
+              {shareNotice && (
+                <p className="text-[11px] text-center text-blue-300 font-medium">
+                  {shareNotice}
+                </p>
+              )}
               {copiedToast && (
                 <p className="text-[11px] text-center text-green-400 font-bold animate-fade-in">
-                  ✓ Emergency message copied to clipboard!
+                  ✓ Emergency alert copied to clipboard. Paste into your messaging app.
                 </p>
               )}
             </div>
           )}
 
-          {/* Action: Native SMS Fallback to Authorized Recipient (Section 5) */}
-          {location && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-3.5 space-y-2.5">
+          {/* AUTOMATIC POLICE ALERT (Section: Police Realtime Dispatch) */}
+          {isEmergencyActive && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-2.5 backdrop-blur-md">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                  Native SMS Action
+                <span className="text-xs font-black tracking-wider text-emerald-400 uppercase flex items-center gap-1.5">
+                  <Shield className="w-4 h-4 text-emerald-400" />
+                  AUTOMATIC POLICE ALERT
                 </span>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  {AUTHORIZED_SOS_RECIPIENTS.length} authorized contacts
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {sosRecord && !sosRecord._local_only ? "Delivered to Dispatch" : "Connecting..."}
                 </span>
               </div>
 
-              {/* Selector among authorized numbers */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                {AUTHORIZED_SOS_RECIPIENTS.map((phone, idx) => (
-                  <button
-                    key={phone}
-                    type="button"
-                    onClick={() => setSelectedRecipientIdx(idx)}
-                    className={`text-[10px] font-mono px-2 py-1 rounded-lg border transition-all cursor-pointer shrink-0 ${
-                      selectedRecipientIdx === idx
-                        ? "bg-blue-600/30 border-blue-500 text-blue-200"
-                        : "bg-slate-800/40 border-slate-700 text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    {maskPhoneNumber(phone)}
-                  </button>
-                ))}
+              <ul className="space-y-1.5 text-xs">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${sosRecord && !sosRecord._local_only ? "text-emerald-400" : "text-slate-500"}`} />
+                  <span className={sosRecord && !sosRecord._local_only ? "font-semibold text-emerald-300" : "text-slate-400"}>
+                    SOS alert delivered to police dashboard
+                  </span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${location ? "text-emerald-400" : "text-slate-500"}`} />
+                  <span className={location ? "text-slate-200" : "text-slate-400"}>
+                    Location shared
+                    {location && (
+                      <span className="font-mono text-slate-400 text-[11px] ml-1">
+                        ({location.lat.toFixed(5)}, {location.lng.toFixed(5)} {location.accuracy ? `±${Math.round(location.accuracy)}m` : ""})
+                      </span>
+                    )}
+                  </span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${nearestStation ? "text-emerald-400" : "text-slate-500"}`} />
+                  <span className={nearestStation ? "text-slate-200" : "text-slate-400"}>
+                    Nearest station identified
+                    {nearestStation && (
+                      <span className="text-slate-300 font-medium text-[11px] ml-1">
+                        ({nearestStation.station_name || nearestStation.name} [{nearestStation.station_code || nearestStation.code}])
+                      </span>
+                    )}
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* EMERGENCY CONTACT SMS (Section 5: Native Device SMS) */}
+          {location && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div>
+                  <h3 className="text-xs font-black tracking-wider text-slate-200 uppercase flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+                    EMERGENCY CONTACT SMS
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Emergency contacts
+                  </p>
+                </div>
+                <span className="text-[10px] font-semibold text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700">
+                  6 contacts configured
+                </span>
               </div>
 
-              {nativeSmsUri && (
-                <a
-                  id="sos-open-sms-button"
-                  href={nativeSmsUri}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border border-slate-700 text-white text-xs font-bold transition-all no-underline text-center cursor-pointer"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-green-400" />
-                  <span>{"Open SMS to SOS Contact"}</span>
-                </a>
+              {smsNotice && (
+                <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-center">
+                  <p className="text-[11px] text-blue-200 font-medium">
+                    {smsNotice}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Messaging app opened — delivery not confirmed
+                  </p>
+                </div>
               )}
-              <p className="text-[10px] text-slate-400 text-center leading-relaxed">
-                Your phone's Messages app will open. Review and tap Send.
-              </p>
+
+              {/* List of 6 configured contacts */}
+              <div className="space-y-2">
+                {AUTHORIZED_SOS_RECIPIENTS.map((phone, idx) => {
+                  const hasOpened = Boolean(openedSmsContacts[phone]);
+                  const contactSmsUri = buildNativeSmsUri(phone, nativeShareMsg);
+
+                  return (
+                    <div
+                      key={phone}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 gap-2"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-mono font-bold text-slate-300">
+                          {maskPhoneNumber(phone)}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          Contact {idx + 1}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {hasOpened ? (
+                          <div className="flex items-center gap-2 text-right">
+                            <span className="text-[10px] text-emerald-400 font-semibold leading-tight">
+                              SMS draft opened. Tap Send on your phone.
+                            </span>
+                            <a
+                              href={contactSmsUri}
+                              onClick={() => {
+                                setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
+                                setSmsNotice("SMS prepared — tap Send in your messaging app");
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-white underline"
+                              title="Re-open SMS"
+                            >
+                              Reopen
+                            </a>
+                          </div>
+                        ) : (
+                          <a
+                            id={idx === 0 ? "sos-open-sms-button" : `sos-open-sms-button-${idx}`}
+                            href={contactSmsUri}
+                            onClick={() => {
+                              setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
+                              setSmsNotice("SMS prepared — tap Send in your messaging app");
+                            }}
+                            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition-all no-underline shadow cursor-pointer"
+                            title="Open SMS to SOS Contact"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>{"Open SMS"}</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40 text-[10px] text-slate-400 space-y-1">
+                <p className="font-semibold text-slate-300">
+                  Delivery Truthfulness Note:
+                </p>
+                <p>
+                  Your phone's Messages app will open. Review and tap Send. We do not claim background or automatic SMS delivery.
+                </p>
+              </div>
             </div>
           )}
 

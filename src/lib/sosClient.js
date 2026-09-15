@@ -74,6 +74,8 @@ export function buildNativeShareMessage({ location, nearestStation, timestamp })
 /**
  * Generates an individual native `sms:+91...?body=...` URI.
  * Strictly verifies that the recipient belongs to the authorized whitelist.
+ * Note: Native sms: URIs only open the user's messaging app with a pre-filled draft;
+ * they do NOT automatically send or confirm delivery.
  *
  * @param {string} phone - Must be in AUTHORIZED_SOS_RECIPIENTS
  * @param {string} message - Emergency message content
@@ -129,6 +131,9 @@ export function buildSOSInsertPayload({
 
 /**
  * Creates an SOS record in Supabase `sos_records` with local storage fallback.
+ * Returns record with truthful flags:
+ * - `_supabase_inserted: true` and `_local_only: false` if database write succeeded
+ * - `_supabase_inserted: false` and `_local_only: true` if database write failed
  *
  * @param {Object} params - see buildSOSInsertPayload
  * @returns {Promise<Object>} Created SOS record
@@ -156,9 +161,10 @@ export async function createSOSRecord(params) {
       if (error) {
         console.warn("Supabase SOS insert error, persisting to local store:", error.message);
       } else if (data) {
+        const record = { ...data, _supabase_inserted: true, _local_only: false };
         const local = loadFromStorage(LOCAL_SOS_KEY, []);
-        saveToStorage(LOCAL_SOS_KEY, [data, ...local.slice(0, 49)]);
-        return data;
+        saveToStorage(LOCAL_SOS_KEY, [record, ...local.slice(0, 49)]);
+        return record;
       }
     } else {
       // Anonymous insert: PostgREST .select() is not executed because anon cannot SELECT from sos_records
@@ -175,6 +181,8 @@ export async function createSOSRecord(params) {
           created_at: new Date().toISOString(),
           acknowledged_at: null,
           resolved_at: null,
+          _supabase_inserted: true,
+          _local_only: false,
         };
         const local = loadFromStorage(LOCAL_SOS_KEY, []);
         saveToStorage(LOCAL_SOS_KEY, [createdRecord, ...local.slice(0, 49)]);
@@ -192,6 +200,7 @@ export async function createSOSRecord(params) {
     created_at: new Date().toISOString(),
     acknowledged_at: null,
     resolved_at: null,
+    _supabase_inserted: false,
     _local_only: true,
   };
 

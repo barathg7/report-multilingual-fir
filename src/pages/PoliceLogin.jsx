@@ -200,6 +200,9 @@ export default function PoliceLogin() {
                   {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <p className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between">
+                <span>Key format: <code className="font-mono text-blue-600 font-bold">Police@&lt;STATION_CODE&gt;</code> or <code className="font-mono text-blue-600 font-bold">TN-POLICE@2026</code></span>
+              </p>
             </div>
 
             {/* Error Message */}
@@ -230,6 +233,20 @@ export default function PoliceLogin() {
               )}
             </button>
           </form>
+
+          {/* Download Official Directory PDF */}
+          <div className="pt-1">
+            <a
+              href="/POLICE_STATION_CREDENTIALS_DIRECTORY.pdf"
+              download="POLICE_STATION_CREDENTIALS_DIRECTORY.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 transition"
+            >
+              <FileText className="h-4 w-4 text-blue-600" />
+              <span>Official Station Credentials Directory (PDF)</span>
+            </a>
+          </div>
 
           {/* Statutory Footer */}
           <div className="border-t border-slate-100 pt-3">

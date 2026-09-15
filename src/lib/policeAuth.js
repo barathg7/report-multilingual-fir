@@ -59,190 +59,142 @@ export async function authenticatePolice(stationCode, password, officerBadge = "
     );
   }
 
-  // Reject known legacy demo password with clear guidance to official key
-  if (typeof btoa === "function" && btoa(password) === "cG9saWNlMTIz") {
+  // Reject compromised, legacy, or predictable password patterns immediately
+  const lowerPwd = password.trim().toLowerCase();
+  if (
+    (typeof btoa === "function" && btoa(password) === "cG9saWNlMTIz") ||
+    lowerPwd.startsWith("police@") ||
+    lowerPwd.includes("-police@") ||
+    lowerPwd.includes("police-secure") ||
+    lowerPwd.includes("tn-police")
+  ) {
     throw new Error(
-      `Default 'police123' is disabled. Use your official Station Security Key: Police@${cleanCode} (or jurisdictional key 'TN-POLICE@2026'). Refer to the Station Credentials Directory PDF.`
+      "Invalid credentials. Default, predictable, and revoked credentials are permanently disabled. Contact your jurisdictional nodal officer."
     );
   }
-  if (password.length < 6) {
-    throw new Error("Password must be at least 6 characters.");
+
+  if (password.length < 8) {
+    throw new Error("Password must be at least 8 characters.");
   }
 
-  // ── 1. OFFICIAL STATION SECURITY KEY AUTHENTICATION ───────────────────────
-  // Supported formats per official directory PDF:
-  // - Station Key: Police@<CODE> (e.g. Police@TN-ARC-B0085)
-  // - Station Key (compact): Police@<CODENOHYPHEN> (e.g. Police@TNARCB0085)
-  // - State Jurisdictional Key: <STATE>-POLICE@2026 (e.g. TN-POLICE@2026)
-  // - National Master Key: POLICE-SECURE@2026
-  const cleanCodeNoDash = cleanCode.replace(/[^A-Z0-9]/g, "");
-  const statePrefix = cleanCode.split("-")[0] || "TN";
-  const expectedStationKey = `Police@${cleanCode}`;
-  const expectedStationKeyNoDash = `Police@${cleanCodeNoDash}`;
-  const expectedStateKey = `${statePrefix}-POLICE@2026`;
-  const masterKey = "POLICE-SECURE@2026";
-
-  const isOfficialKey =
-    password.trim() === expectedStationKey ||
-    password.trim().toUpperCase() === expectedStationKey.toUpperCase() ||
-    password.trim() === expectedStationKeyNoDash ||
-    password.trim().toUpperCase() === expectedStationKeyNoDash.toUpperCase() ||
-    password.trim() === expectedStateKey ||
-    password.trim() === masterKey;
-
-  if (isOfficialKey) {
-    const verifiedBadge = officerBadge?.trim() || "SHO-DUTY";
-    const sessionToken = {
-      stationCode: cleanCode,
-      stationName: stationMeta.name,
-      district: stationMeta.district,
-      state: stationMeta.state,
-      officerBadge: verifiedBadge,
-      officerName: "Station Duty Officer",
-      rank: "Inspector / SHO",
-      loginType: "official_station_key",
-      authenticatedAt: Date.now(),
-      expiresAt: Date.now() + SESSION_TTL_MS,
-      _displayOnly: true,
-    };
-
-    sessionStorage.setItem(SESSION_DISPLAY_KEY, JSON.stringify(sessionToken));
-    sessionStorage.setItem("police_station_session", JSON.stringify(sessionToken));
-    sessionStorage.removeItem("police_auth_session");
-    sessionStorage.removeItem("police_station");
-
-    return {
-      code: cleanCode,
-      name: stationMeta.name,
-      district: stationMeta.district,
-      state: stationMeta.state,
-      officerBadge: verifiedBadge,
-      officerName: "Station Duty Officer",
-    };
-  }
-
-  // ── 2. SUPABASE AUTH SERVER AUTHENTICATION (CUSTOM PROVISIONED) ───────────
+  // ── SERVER AUTHENTICATION VIA SUPABASE AUTH ─────────────────────────────────
+  // Station credentials are NEVER verified on the client.
+  // Station identity is determined EXCLUSIVELY by Supabase Auth + police_officers table.
   const email = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, "")}@police.internal`;
-  let authData = null;
-  let authError = null;
 
-  try {
-    const res = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    authData = res.data;
-    authError = res.error;
-  } catch (err) {
-    authError = err;
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (authError || !authData?.user) {
+    throw new Error(
+      "Authentication failed. Verify your station code and password, or contact your administrative nodal officer."
+    );
   }
 
-  if (!authError && authData?.user) {
-    const authUid = authData.user.id;
-    const { data: officerRow, error: officerError } = await supabase
-      .from("police_officers")
-      .select("station_code, badge_number, officer_name, rank, is_active")
-      .eq("auth_uid", authUid)
-      .eq("is_active", true)
-      .single();
+  const authUid = authData.user.id;
 
-    if (!officerError && officerRow && officerRow.station_code.toUpperCase() === cleanCode) {
-      const displayCache = {
-        stationCode: officerRow.station_code,
-        stationName: stationMeta.name,
-        district: stationMeta.district,
-        state: stationMeta.state,
-        officerBadge: officerRow.badge_number || officerBadge || "SHO-DUTY",
-        officerName: officerRow.officer_name || "",
-        rank: officerRow.rank || "",
-        cachedAt: Date.now(),
-        expiresAt: Date.now() + SESSION_TTL_MS,
-        loginType: "supabase_auth",
-        _displayOnly: true,
-      };
+  // ── SERVER-DERIVED JURISDICTION & OFFICER RECORD ───────────────────────────
+  // Query police_officers keyed strictly by auth.uid() — cannot be forged by client.
+  const { data: officerRow, error: officerError } = await supabase
+    .from("police_officers")
+    .select("station_code, badge_number, officer_name, rank, is_active")
+    .eq("auth_uid", authUid)
+    .eq("is_active", true)
+    .single();
 
-      sessionStorage.setItem(SESSION_DISPLAY_KEY, JSON.stringify(displayCache));
-      sessionStorage.setItem("police_station_session", JSON.stringify(displayCache));
-      sessionStorage.removeItem("police_auth_session");
-      sessionStorage.removeItem("police_station");
-
-      return {
-        code: officerRow.station_code,
-        name: stationMeta.name,
-        district: stationMeta.district,
-        state: stationMeta.state,
-        officerBadge: officerRow.badge_number || officerBadge || "SHO-DUTY",
-        officerName: officerRow.officer_name || "",
-      };
-    }
+  if (officerError || !officerRow) {
+    await supabase.auth.signOut();
+    throw new Error(
+      "Your account is not linked to an active station. Contact your jurisdictional nodal officer to complete registration."
+    );
   }
 
-  // If neither key nor Supabase matched:
-  throw new Error(
-    `Authentication failed. Verify your Station Security Key (e.g. Police@${cleanCode} or TN-POLICE@2026) or download the credentials directory PDF.`
-  );
+  // Verify station_code from server record matches what officer entered
+  if (officerRow.station_code.toUpperCase() !== cleanCode) {
+    await supabase.auth.signOut();
+    throw new Error(
+      "Station assignment mismatch. Your credentials are not authorised for this station code."
+    );
+  }
+
+  // ── CACHE DISPLAY DATA ONLY (UI RENDERING ONLY) ───────────────────────────
+  // Authorization decisions are NEVER made from this cache.
+  const displayCache = {
+    stationCode: officerRow.station_code,
+    stationName: stationMeta.name,
+    district: stationMeta.district,
+    state: stationMeta.state,
+    officerBadge: officerRow.badge_number || officerBadge || "SHO-DUTY",
+    officerName: officerRow.officer_name || "",
+    rank: officerRow.rank || "",
+    cachedAt: Date.now(),
+    expiresAt: Date.now() + SESSION_TTL_MS,
+    _displayOnly: true,
+    _doNotTrustForAuth: true,
+  };
+
+  sessionStorage.setItem(SESSION_DISPLAY_KEY, JSON.stringify(displayCache));
+  sessionStorage.removeItem("police_station_session");
+  sessionStorage.removeItem("police_auth_session");
+  sessionStorage.removeItem("police_station");
+
+  return {
+    code: officerRow.station_code,
+    name: stationMeta.name,
+    district: stationMeta.district,
+    state: stationMeta.state,
+    officerBadge: officerRow.badge_number || officerBadge || "SHO-DUTY",
+    officerName: officerRow.officer_name || "",
+  };
 }
 
 /**
  * Returns the authenticated officer's station info for UI display.
- * Checks active Supabase Auth session first, then validated station session.
+ * Authoritative source: supabase.auth.getSession() + police_officers DB query.
+ * If the Supabase session is absent or expired, returns null immediately.
  */
 export async function getAuthenticatedStation() {
-  // Step 1: Active Supabase Auth session (server-issued JWT)
-  try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (!sessionError && session?.user) {
-      const { data: officerRow } = await supabase
-        .from("police_officers")
-        .select("station_code, badge_number, officer_name, rank, is_active")
-        .eq("auth_uid", session.user.id)
-        .eq("is_active", true)
-        .single();
+  // Require an active Supabase Auth session (server-issued JWT)
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (officerRow) {
-        const stationMeta = getStationByCode(officerRow.station_code);
-        return {
-          code: officerRow.station_code,
-          name: stationMeta?.name || officerRow.station_code,
-          district: stationMeta?.district || "",
-          state: stationMeta?.state || "Tamil Nadu",
-          officerBadge: officerRow.badge_number || "SHO-DUTY",
-          officerName: officerRow.officer_name || "",
-          rank: officerRow.rank || "",
-          authUid: session.user.id,
-        };
-      }
-    }
-  } catch (_) {}
+  if (sessionError || !session?.user) {
+    await clearPoliceSession();
+    return null;
+  }
 
-  // Step 2: Validated Station Security Session (sessionStorage)
-  try {
-    const stored = sessionStorage.getItem("police_station_session");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.stationCode && parsed?.expiresAt && parsed.expiresAt > Date.now()) {
-        const stationMeta = getStationByCode(parsed.stationCode);
-        if (stationMeta) {
-          return {
-            code: parsed.stationCode,
-            name: stationMeta.name,
-            district: stationMeta.district,
-            state: stationMeta.state,
-            officerBadge: parsed.officerBadge || "SHO-DUTY",
-            officerName: parsed.officerName || "Station Duty Officer",
-            rank: parsed.rank || "Inspector / SHO",
-          };
-        }
-      }
-    }
-  } catch (_) {}
+  // Authoritative query: police_officers keyed by auth.uid()
+  const { data: officerRow, error: officerError } = await supabase
+    .from("police_officers")
+    .select("station_code, badge_number, officer_name, rank, is_active")
+    .eq("auth_uid", session.user.id)
+    .eq("is_active", true)
+    .single();
 
-  await clearPoliceSession();
-  return null;
+  if (officerError || !officerRow) {
+    await clearPoliceSession();
+    return null;
+  }
+
+  const stationMeta = getStationByCode(officerRow.station_code);
+
+  const verifiedIdentity = {
+    code: officerRow.station_code,
+    name: stationMeta?.name || officerRow.station_code,
+    district: stationMeta?.district || "",
+    state: stationMeta?.state || "Tamil Nadu",
+    officerBadge: officerRow.badge_number || "SHO-DUTY",
+    officerName: officerRow.officer_name || "",
+    rank: officerRow.rank || "",
+    authUid: session.user.id,
+  };
+
+  return verifiedIdentity;
 }
 
 /**
- * Signs the officer out and clears any display cache.
+ * Signs the officer out and clears all session storage.
  */
 export async function clearPoliceSession() {
   try {

@@ -1,15 +1,25 @@
 // src/lib/supabaseClient.js — Hardened Supabase Client & Secure RPC Interface
 import { createClient } from "@supabase/supabase-js";
-import { toSupabaseRow, normalizeFIR } from "./firSchema";
+import { toSupabaseRow, normalizeFIR } from "./firSchema.js";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const envMeta = typeof import.meta !== "undefined" ? import.meta.env : undefined;
+const envProc = typeof process !== "undefined" ? process.env : undefined;
+
+const SUPABASE_URL = envMeta?.VITE_SUPABASE_URL || envProc?.VITE_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY =
+  envMeta?.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  envMeta?.VITE_SUPABASE_ANON_KEY ||
+  envProc?.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  envProc?.VITE_SUPABASE_ANON_KEY ||
+  "";
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn(
-    "⚠️ Supabase credentials missing!\n" +
-      "Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file."
-  );
+  if (typeof window !== "undefined") {
+    console.warn(
+      "⚠️ Supabase credentials missing!\n" +
+        "Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file."
+    );
+  }
 }
 
 export const supabase = createClient(
@@ -178,3 +188,17 @@ export async function getCitizenFIR(firId, accessToken) {
     return null;
   }
 }
+
+// ── SOS Operations (Stage 6.3) ──────────────────────────────────────────────
+export {
+  createSOSRecord,
+  getStationSOSAlerts,
+  acknowledgeSOS,
+  resolveSOS,
+  subscribeToStationSOS,
+  subscribeToCitizenSOS,
+  buildMapsUrl,
+  buildNativeShareMessage,
+  buildNativeSmsUri,
+  buildSOSInsertPayload,
+} from "./sosClient.js";

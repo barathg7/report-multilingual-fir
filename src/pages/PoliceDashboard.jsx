@@ -20,6 +20,13 @@ import PoliceFilterBar from "@/components/police/PoliceFilterBar";
 import CaseCard from "@/components/police/CaseCard";
 import CaseReviewModal from "@/components/police/CaseReviewModal";
 import FakeFIRModal from "@/components/police/FakeFIRModal";
+import SOSCommandAlert from "@/components/police/SOSCommandAlert";
+import {
+  getStationSOSAlerts,
+  acknowledgeSOS,
+  resolveSOS,
+  subscribeToStationSOS,
+} from "@/lib/sosClient";
 
 export default function PoliceDashboard() {
   const navigate = useNavigate();
@@ -33,6 +40,8 @@ export default function PoliceDashboard() {
   const [downloadingId, setDownloadingId] = useState(null);
   const [fakeFIRTarget, setFakeFIRTarget] = useState(null);
   const [fakeConfirming, setFakeConfirming] = useState(false);
+  const [sosAlerts, setSosAlerts] = useState([]);
+  const [sosActionLoadingId, setSosActionLoadingId] = useState(null);
 
   // Unified FIR fetch: pulls station-scoped records from Supabase and local store
   const fetchStationFIRs = useCallback(async (s) => {
@@ -74,6 +83,8 @@ export default function PoliceDashboard() {
   useEffect(() => {
     let active = true;
 
+    let sosSub = null;
+
     async function loadStationAuth() {
       const s = await getAuthenticatedStation();
       if (!s) {
@@ -83,6 +94,33 @@ export default function PoliceDashboard() {
       if (active) {
         setStation(s);
         fetchStationFIRs(s);
+
+        // Fetch station-scoped active SOS alerts
+        const stationCode = (s.code || s.station_code || "").trim().toUpperCase();
+        getStationSOSAlerts(stationCode).then((alerts) => {
+          if (active) setSosAlerts(alerts);
+        });
+
+        // Real-time station SOS subscription
+        sosSub = subscribeToStationSOS(
+          stationCode,
+          (newAlert) => {
+            if (active) {
+              setSosAlerts((prev) => [newAlert, ...prev.filter((a) => a.id !== newAlert.id)]);
+            }
+          },
+          (updatedAlert) => {
+            if (active) {
+              if (["resolved", "cancelled"].includes(updatedAlert.status)) {
+                setSosAlerts((prev) => prev.filter((a) => a.id !== updatedAlert.id));
+              } else {
+                setSosAlerts((prev) =>
+                  prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a))
+                );
+              }
+            }
+          }
+        );
       }
     }
     loadStationAuth();
@@ -118,6 +156,7 @@ export default function PoliceDashboard() {
       active = false;
       supabase.removeChannel(channel);
       authListener.unsubscribe();
+      if (sosSub) sosSub.unsubscribe();
     };
   }, [navigate, fetchStationFIRs]);
 
@@ -183,6 +222,40 @@ export default function PoliceDashboard() {
       alert("Failed to flag fake FIR: " + e.message);
     } finally {
       setFakeConfirming(false);
+    }
+  };
+
+  // Realtime Station SOS Acknowledge Handler
+  const handleAcknowledgeSOS = async (sosId) => {
+    setSosActionLoadingId(sosId);
+    try {
+      await acknowledgeSOS(sosId, station?.officerBadge || "OFFICER");
+      setSosAlerts((prev) =>
+        prev.map((a) =>
+          a.id === sosId
+            ? { ...a, status: "acknowledged", acknowledged_at: new Date().toISOString() }
+            : a
+        )
+      );
+    } catch (err) {
+      console.error("SOS acknowledge error:", err);
+      alert("Failed to acknowledge SOS: " + err.message);
+    } finally {
+      setSosActionLoadingId(null);
+    }
+  };
+
+  // Realtime Station SOS Resolve Handler
+  const handleResolveSOS = async (sosId) => {
+    setSosActionLoadingId(sosId);
+    try {
+      await resolveSOS(sosId, "Resolved by station command officer");
+      setSosAlerts((prev) => prev.filter((a) => a.id !== sosId));
+    } catch (err) {
+      console.error("SOS resolve error:", err);
+      alert("Failed to resolve SOS: " + err.message);
+    } finally {
+      setSosActionLoadingId(null);
     }
   };
 
@@ -355,6 +428,15 @@ export default function PoliceDashboard() {
 
       {/* Main Command Center Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5">
+
+        {/* High-Priority Realtime Citizen SOS Alerts */}
+        <SOSCommandAlert
+          alerts={sosAlerts}
+          station={station}
+          onAcknowledge={handleAcknowledgeSOS}
+          onResolve={handleResolveSOS}
+          loadingId={sosActionLoadingId}
+        />
 
         {/* Metric Summary Tiles */}
         <PoliceStatsRow

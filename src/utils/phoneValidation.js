@@ -49,3 +49,10 @@ export function normalizeStationRecord(s, distanceKm = 0) {
     distance_km:  distanceKm,
   };
 }
+
+export {
+  AUTHORIZED_SOS_RECIPIENTS,
+  isAuthorizedRecipient,
+  maskPhoneNumber,
+  buildSosMessage,
+} from "../config/sosRecipients.js";

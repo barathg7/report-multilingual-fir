@@ -23,6 +23,8 @@ import {
   AUTHORIZED_SOS_RECIPIENTS,
   maskPhoneNumber,
   buildSosMessage,
+  buildCanonicalSosMessage,
+  getStationCategorizedRecipients,
 } from "../../config/sosRecipients";
 import {
   createSOSRecord,
@@ -209,19 +211,24 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
 
       // Create Supabase record
       try {
+        const canonicalMsg = buildCanonicalSosMessage({
+          location: coords,
+          nearestStation: closestStation,
+        });
+
         const record = await createSOSRecord({
           latitude: coords.lat,
           longitude: coords.lng,
           accuracy: coords.accuracy,
           nearestStation: closestStation,
-          message: "SOS — immediate assistance requested.",
+          message: canonicalMsg,
         });
 
         if (isMountedRef.current && record) {
           setSosRecord(record);
           if (!record._local_only && record._supabase_inserted !== false) {
             setSosState(SOS_STATES.POLICE_ALERTED);
-            setStatusMessage("SOS alert sent to the jurisdictional police dashboard");
+            setStatusMessage("SOS alert dispatched to the jurisdictional police dashboard");
 
             // Subscribe to live status updates on this record
             if (record.id) {
@@ -306,10 +313,11 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
 
   if (!showPanel) return null;
 
-  const currentRecipient = AUTHORIZED_SOS_RECIPIENTS[selectedRecipientIdx] || AUTHORIZED_SOS_RECIPIENTS[0];
+  const resolvedStationCode = nearestStation?.station_code || nearestStation?.code || "ONLINE";
+  const { primary: primaryRecipients, backup: backupRecipients } = getStationCategorizedRecipients(resolvedStationCode);
+  const canonicalSosMsg = location ? buildCanonicalSosMessage({ location, nearestStation }) : "";
   const mapsUrl = location ? buildMapsUrl(location.lat, location.lng) : null;
-  const nativeShareMsg = location ? buildNativeShareMessage({ location, nearestStation }) : "";
-  const nativeSmsUri = location ? buildNativeSmsUri(currentRecipient, nativeShareMsg) : null;
+  const nativeShareMsg = canonicalSosMsg || (location ? buildNativeShareMessage({ location, nearestStation }) : "");
 
   const isEmergencyActive = [
     SOS_STATES.SOS_ACTIVE,
@@ -532,7 +540,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                     : "bg-slate-800 text-slate-300 border border-slate-700"
                 }`}
               >
-                {sosState}
+                {sosState === SOS_STATES.POLICE_ALERTED ? "POLICE DISPATCHED" : sosState}
               </span>
             </div>
 
@@ -658,22 +666,24 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
             </div>
           )}
 
-          {/* EMERGENCY CONTACT SMS (Section 5: Native Device SMS) */}
+          {/* EMERGENCY CONTACT SMS (Section 5: Native Device SMS with Shuffled Contacts) */}
           {location && (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                 <div>
                   <h3 className="text-xs font-black tracking-wider text-slate-200 uppercase flex items-center gap-1.5">
                     <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-                    EMERGENCY CONTACT SMS
+                    PRIMARY SOS CONTACTS
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Emergency contacts
+                    3 contacts will be notified through the phone's messaging app
                   </p>
                 </div>
-                <span className="text-[10px] font-semibold text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700">
-                  6 contacts configured
-                </span>
+                <div className="text-right">
+                  <span className="text-[10px] font-semibold text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700">
+                    Backup contacts: 3
+                  </span>
+                </div>
               </div>
 
               {smsNotice && (
@@ -687,11 +697,12 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 </div>
               )}
 
-              {/* List of 6 configured contacts */}
+              {/* Primary 3 Contacts with individual mobile SMS buttons */}
               <div className="space-y-2">
-                {AUTHORIZED_SOS_RECIPIENTS.map((phone, idx) => {
+                {primaryRecipients.map((phone, idx) => {
+                  const contactNum = idx + 1;
                   const hasOpened = Boolean(openedSmsContacts[phone]);
-                  const contactSmsUri = buildNativeSmsUri(phone, nativeShareMsg);
+                  const contactSmsUri = buildNativeSmsUri(phone, canonicalSosMsg);
 
                   return (
                     <div
@@ -703,7 +714,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                           {maskPhoneNumber(phone)}
                         </span>
                         <span className="text-[10px] text-slate-500 font-medium">
-                          Contact {idx + 1}
+                          Contact {contactNum}
                         </span>
                       </div>
 
@@ -711,33 +722,33 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                         {hasOpened ? (
                           <div className="flex items-center gap-2 text-right">
                             <span className="text-[10px] text-emerald-400 font-semibold leading-tight">
-                              SMS draft opened. Tap Send on your phone.
+                              Emergency SOS message prepared for Contact {contactNum}. Tap Send in your Messages app.
                             </span>
                             <a
                               href={contactSmsUri}
                               onClick={() => {
                                 setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
-                                setSmsNotice("SMS prepared — tap Send in your messaging app");
+                                setSmsNotice(`Emergency SOS message prepared for Contact ${contactNum}. Tap Send in your Messages app.`);
                               }}
                               className="text-[10px] text-slate-400 hover:text-white underline"
-                              title="Re-open SMS"
+                              title={`Reopen SOS SMS ${contactNum}`}
                             >
                               Reopen
                             </a>
                           </div>
                         ) : (
                           <a
-                            id={idx === 0 ? "sos-open-sms-button" : `sos-open-sms-button-${idx}`}
+                            id={contactNum === 1 ? "sos-open-sms-button" : `sos-open-sms-button-${contactNum}`}
                             href={contactSmsUri}
                             onClick={() => {
                               setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
-                              setSmsNotice("SMS prepared — tap Send in your messaging app");
+                              setSmsNotice(`Emergency SOS message prepared for Contact ${contactNum}. Tap Send in your Messages app.`);
                             }}
                             className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition-all no-underline shadow cursor-pointer"
-                            title="Open SMS to SOS Contact"
+                            title={`[ Contact ${contactNum} ] Open SOS SMS`}
                           >
                             <MessageSquare className="w-3 h-3" />
-                            <span>{"Open SMS"}</span>
+                            <span>OPEN SOS SMS {contactNum}</span>
                           </a>
                         )}
                       </div>
@@ -746,12 +757,35 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 })}
               </div>
 
+              {/* BACKUP CONTACTS (3 contacts configured) */}
+              <div className="pt-2.5 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-black tracking-wider text-slate-400 uppercase">
+                    BACKUP CONTACTS
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
+                    3 contacts configured
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Backup contacts: 3 (held in reserve if primary contacts are unreachable)
+                </p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {backupRecipients.map((phone, bIdx) => (
+                    <div key={phone} className="p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-center">
+                      <div className="text-[9px] text-slate-400 font-medium">Backup {bIdx + 1}</div>
+                      <div className="text-[10px] font-mono text-slate-400">{maskPhoneNumber(phone)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40 text-[10px] text-slate-400 space-y-1">
                 <p className="font-semibold text-slate-300">
                   Delivery Truthfulness Note:
                 </p>
                 <p>
-                  Your phone's Messages app will open. Review and tap Send. We do not claim background or automatic SMS delivery.
+                  Your phone's Messages app will open with prefilled emergency alert. Review and tap Send. We do not claim background or automatic SMS delivery.
                 </p>
               </div>
             </div>

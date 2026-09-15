@@ -335,14 +335,17 @@ runTest("TEST 10: UI components guarantee truthful delivery status (no hardcoded
 
   // Verify button text and explicit truthful section requirements:
   assert.match(fileContent, /"Share SOS"/);
-  assert.match(fileContent, /"Open SMS"/);
-  assert.match(fileContent, /"Open SMS to SOS Contact"/);
-  assert.match(fileContent, /Your phone's Messages app will open\. Review and tap Send\./);
+  assert.match(fileContent, /OPEN SOS SMS/);
+  assert.match(fileContent, /Open SOS SMS/);
+  assert.match(fileContent, /Your phone's Messages app will open/);
   assert.match(fileContent, /AUTOMATIC POLICE ALERT/);
   assert.match(fileContent, /SOS alert delivered to police dashboard/);
-  assert.match(fileContent, /EMERGENCY CONTACT SMS/);
-  assert.match(fileContent, /6 contacts configured/);
-  assert.match(fileContent, /SMS draft opened\. Tap Send on your phone\./);
+  assert.match(fileContent, /PRIMARY SOS CONTACTS/);
+  assert.match(fileContent, /3 contacts will be notified through the phone's messaging app/);
+  assert.match(fileContent, /BACKUP CONTACTS/);
+  assert.match(fileContent, /3 contacts configured/);
+  assert.match(fileContent, /Emergency SOS message prepared for Contact/);
+  assert.match(fileContent, /Tap Send in your Messages app\./);
   assert.match(fileContent, /Share sheet opened\. Delivery depends on the selected messaging app\./);
 
   // Verify that deceptive delivery strings are NEVER used

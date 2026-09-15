@@ -2,8 +2,20 @@
 // Stage 6.3: Rebuild SOS Around Free Native + Realtime Architecture
 
 import { supabase } from "./supabaseClient.js";
-import { AUTHORIZED_SOS_RECIPIENTS, isAuthorizedRecipient } from "../config/sosRecipients.js";
+import {
+  AUTHORIZED_SOS_RECIPIENTS,
+  isAuthorizedRecipient,
+  getStationShuffledRecipients,
+  getStationCategorizedRecipients,
+  buildCanonicalSosMessage,
+} from "../config/sosRecipients.js";
 import { loadFromStorage, saveToStorage } from "../utils/index.js";
+
+export {
+  getStationShuffledRecipients,
+  getStationCategorizedRecipients,
+  buildCanonicalSosMessage,
+};
 
 const LOCAL_SOS_KEY = "report_sos_local_records";
 

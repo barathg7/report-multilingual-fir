@@ -299,9 +299,9 @@ runTest("TEST 12: No UI string in EmergencySecurity.jsx claims SMS delivery with
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 13 — Emergency contacts UI section explicitly states draft opening
+// TEST 13 — Emergency contacts UI section explicitly states draft opening and Stage 6.5 contact configuration
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 13: Emergency contacts UI section explicitly states draft opening and 6 contacts configured", () => {
+runTest("TEST 13: Emergency contacts UI section explicitly states draft opening and Stage 6.5 contact configuration", () => {
   const componentPath = path.join(projectRoot, "src", "components", "kavalan", "EmergencySecurity.jsx");
   const content = fs.readFileSync(componentPath, "utf-8");
 
@@ -309,10 +309,14 @@ runTest("TEST 13: Emergency contacts UI section explicitly states draft opening 
   assert.match(content, /SOS alert delivered to police dashboard/);
   assert.match(content, /Location shared/);
   assert.match(content, /Nearest station identified/);
-  assert.match(content, /EMERGENCY CONTACT SMS/);
-  assert.match(content, /6 contacts configured/);
-  assert.match(content, /"Open SMS"/);
-  assert.match(content, /SMS draft opened\. Tap Send on your phone\./);
+  assert.match(content, /PRIMARY SOS CONTACTS/);
+  assert.match(content, /3 contacts will be notified through the phone's messaging app/);
+  assert.match(content, /Backup contacts: 3/);
+  assert.match(content, /BACKUP CONTACTS/);
+  assert.match(content, /3 contacts configured/);
+  assert.match(content, /OPEN SOS SMS/);
+  assert.match(content, /Emergency SOS message prepared for Contact/);
+  assert.match(content, /Tap Send in your Messages app\./);
   assert.match(content, /Share sheet opened\. Delivery depends on the selected messaging app\./);
 });
 

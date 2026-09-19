@@ -6,6 +6,7 @@ import {
   ArrowLeft, RefreshCw, Clock, CheckCircle, AlertTriangle,
   Scale, Shield
 } from "lucide-react";
+import Card3D from "@/components/ui/Card3D";
 import { getFIRsForStation } from "@/lib/supabaseClient";
 import { getAuthenticatedStation } from "@/lib/policeAuth";
 import { loadFromStorage } from "@/utils";
@@ -144,32 +145,32 @@ export default function Analytics() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen civic-mesh-bg flex flex-col font-sans">
       
       {/* Header */}
-      <header className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-slate-800">
+      <header className="bg-slate-900/95 backdrop-blur-xl text-white px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-3d-card border-b border-slate-800 ambient-lighting">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/police-dashboard")}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700"
             title="Back to Station Dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-3d-button-primary border border-cyan-400/30">
               <BarChart2 className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="font-bold text-sm sm:text-base text-white">Station Crime Analytics</h1>
-              {station && <p className="text-slate-400 text-xs">{station.name} · {station.district}</p>}
+              <h1 className="font-extrabold text-sm sm:text-base text-white tracking-tight">Station Crime Analytics</h1>
+              {station && <p className="text-slate-400 text-xs font-medium">{station.name} · {station.district}</p>}
             </div>
           </div>
         </div>
 
         <button
           onClick={() => station && fetchStationFIRs(station)}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700"
+          className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700 cursor-pointer shadow-sm"
           title="Refresh Data"
         >
           <RefreshCw className="h-4 w-4" />
@@ -177,16 +178,18 @@ export default function Analytics() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         
-        {/* Stat Cards Grid */}
+        {/* 3D Stat Cards Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           {statCards.map(({ label, value, icon: Icon, bg, text }) => (
-            <div key={label} className={`${bg} border rounded-2xl p-3.5 text-center shadow-2xs`}>
-              <Icon className={`h-4 w-4 ${text} mx-auto mb-1 opacity-80`} />
-              <p className={`text-2xl font-black ${text}`}>{value}</p>
-              <p className={`text-[11px] font-semibold ${text} opacity-75 mt-0.5 leading-tight`}>{label}</p>
-            </div>
+            <Card3D key={label} maxTilt={6} glowColor="rgba(56, 189, 248, 0.15)" className="rounded-2xl">
+              <div className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl p-4 text-center shadow-3d-card hover:border-blue-300 transition-all h-full flex flex-col justify-between">
+                <Icon className={`h-4 w-4 ${text} mx-auto mb-1 opacity-80`} />
+                <p className={`text-2xl font-black text-slate-900 tracking-tight`}>{value}</p>
+                <p className={`text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 leading-tight`}>{label}</p>
+              </div>
+            </Card3D>
           ))}
         </div>
 

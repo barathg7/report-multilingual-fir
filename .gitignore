@@ -13,3 +13,7 @@ node_modules/
 dist/
 src/components/kavalan/.env
 .env*
+scratch/
+*.zip
+*.pptx
+demo_videos/

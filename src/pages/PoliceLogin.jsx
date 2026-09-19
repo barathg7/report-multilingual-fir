@@ -5,6 +5,7 @@ import {
   Shield, Lock, Eye, EyeOff, Loader2, AlertCircle, CheckCircle,
   BadgeCheck, ArrowRight, Radio, Building2
 } from "lucide-react";
+import Card3D from "@/components/ui/Card3D";
 import { authenticatePolice, getAuthenticatedStation } from "@/lib/policeAuth";
 import { getStationByCode } from "@/utils/policeStations";
 
@@ -99,146 +100,149 @@ export default function PoliceLogin() {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
 
       {/* Background ambient lighting */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 hologram-grid opacity-35 pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10 space-y-6">
 
         {/* Terminal Header & Emblem */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-900 text-white shadow-xl border border-blue-400/30 mb-1">
-            <Shield className="h-8 w-8 drop-shadow" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-700 via-indigo-900 to-slate-950 text-white shadow-3d-button-primary border border-cyan-400/40 mb-1">
+            <Shield className="h-8 w-8 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
           </div>
-          <h1 className="text-white text-2xl font-black tracking-tight">
+          <h1 className="text-white text-2xl sm:text-3xl font-black tracking-tight">
             Police Command Terminal
           </h1>
           <div className="flex items-center justify-center gap-2 text-xs text-blue-200">
-            <span className="inline-flex items-center gap-1 bg-blue-950/70 text-blue-300 px-2.5 py-0.5 rounded-full border border-blue-800/60 font-mono font-semibold">
-              <Radio className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 bg-blue-950/80 text-cyan-300 px-3 py-1 rounded-full border border-cyan-500/40 font-mono font-bold shadow-sm">
+              <Radio className="h-3 w-3 text-emerald-400 animate-pulse" />
               <span>TLS 1.3 SECURE PORTAL</span>
             </span>
           </div>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-5 border border-slate-200/90">
+        {/* 3D Glass Login Card */}
+        <Card3D maxTilt={6} glowColor="rgba(6, 182, 212, 0.2)" className="rounded-3xl">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-3d-card-hover p-7 sm:p-8 space-y-5 border border-white/80">
 
-          <div className="border-b border-slate-100 pb-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Jurisdictional Authentication
-            </p>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Authorized Station Duty Officers & Investigating Personnel
-            </p>
-          </div>
+            <div className="border-b border-slate-100 pb-3">
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                Jurisdictional Authentication
+              </p>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Authorized Station Duty Officers &amp; Investigating Personnel
+              </p>
+            </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
 
-            {/* Station Jurisdiction Code */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Station Jurisdiction Code
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={code}
-                  onChange={(e) => handleCodeChange(e.target.value)}
-                  placeholder="E.G. TN-CHN-001"
-                  autoComplete="username"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold tracking-wider text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 uppercase transition"
-                />
-                <Building2 className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              {/* Station Jurisdiction Code */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Station Jurisdiction Code
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => handleCodeChange(e.target.value)}
+                    placeholder="E.G. TN-CHN-001"
+                    autoComplete="username"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold tracking-wider text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 uppercase transition"
+                  />
+                  <Building2 className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+                {stationName && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <p className="text-xs text-emerald-800 font-bold truncate">{stationName}</p>
+                  </div>
+                )}
               </div>
-              {stationName && (
-                <div className="flex items-center gap-1.5 mt-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <p className="text-xs text-emerald-800 font-bold truncate">{stationName}</p>
+
+              {/* Officer Badge / Service ID */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Officer Badge / Service ID
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={badge}
+                    onChange={(e) => setBadge(e.target.value.toUpperCase())}
+                    placeholder="E.G. SHO-4102 OR IO-DUTY"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-semibold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 uppercase transition"
+                  />
+                  <BadgeCheck className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Station Password */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Station Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPwd ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
+                    placeholder="Enter encrypted station password"
+                    autoComplete="current-password"
+                    className="w-full px-4 py-2.5 pr-11 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer p-1"
+                    title={showPwd ? "Hide password" : "Show password"}
+                  >
+                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl p-3">
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-rose-700 font-medium leading-snug">{error}</p>
                 </div>
               )}
+
+              {/* Submit Action */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 active:scale-98 text-white font-bold text-sm shadow-3d-button-primary hover:shadow-3d-glow-blue transition cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Verifying Credentials…</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4" />
+                    <span>Access Station Terminal</span>
+                    <ArrowRight className="h-4 w-4 ml-0.5" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Statutory Footer */}
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                Official Police Use Only. Governed under <strong>Information Technology Act 2000</strong> &amp; <strong>Bharatiya Nagarik Suraksha Sanhita 2023</strong>. Unauthorized access is punishable by law.
+              </p>
             </div>
 
-            {/* Officer Badge / Service ID */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Officer Badge / Service ID
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={badge}
-                  onChange={(e) => setBadge(e.target.value.toUpperCase())}
-                  placeholder="E.G. SHO-4102 OR IO-DUTY"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-semibold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 uppercase transition"
-                />
-                <BadgeCheck className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Station Password */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Station Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPwd ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError("");
-                  }}
-                  placeholder="Enter encrypted station password"
-                  autoComplete="current-password"
-                  className="w-full px-3.5 py-2.5 pr-11 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer p-1"
-                  title={showPwd ? "Hide password" : "Show password"}
-                >
-                  {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl p-3">
-                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-rose-700 font-medium leading-snug">{error}</p>
-              </div>
-            )}
-
-            {/* Submit Action */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition cursor-pointer disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Verifying Credentials…</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4" />
-                  <span>Access Station Terminal</span>
-                  <ArrowRight className="h-4 w-4 ml-0.5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Statutory Footer */}
-          <div className="border-t border-slate-100 pt-3">
-            <p className="text-[11px] text-slate-500 text-center leading-relaxed">
-              Official Police Use Only. Governed under <strong>Information Technology Act 2000</strong> & <strong>Bharatiya Nagarik Suraksha Sanhita 2023</strong>. Unauthorized access is punishable by law.
-            </p>
           </div>
-
-        </div>
+        </Card3D>
 
       </div>
     </div>

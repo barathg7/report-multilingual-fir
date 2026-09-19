@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, CheckCircle, AlertTriangle, Sparkles, MapPin, FileText, Wand2, Scale } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
+import ThreeAudioSphere from "@/components/ui/ThreeAudioSphere";
 import GroqManager from './GroqManager';
 import { calculateCompleteness } from "@/lib/firSchema";
 import { formatDateForDisplay, formatTimeForDisplay, parseItemsList, isMeaningfulValue } from "@/utils";
@@ -713,31 +714,46 @@ OUTPUT FORMAT - Return ONLY this JSON structure:
   );
 
   const MicArea = ({ voice, onStop, onStart, hint }) => (
-    <div className="flex flex-col items-center gap-3 py-5 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-      <button
-        onClick={voice.recording ? () => voice.stop(onStop) : () => voice.start(onStart)}
-        disabled={processing}
-        className={`h-20 w-20 rounded-full flex items-center justify-center shadow-lg transition-all ${
-          processing ? "bg-gray-400 cursor-not-allowed" : voice.recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"
-        }`}
-      >
-        {voice.recording ? <MicOff className="h-9 w-9 text-white" /> : <Mic className="h-9 w-9 text-white" />}
-      </button>
+    <div className="flex flex-col items-center gap-3 py-6 px-4 border border-blue-200/80 rounded-3xl bg-gradient-to-b from-slate-900/5 via-white to-blue-50/30 shadow-3d-card backdrop-blur-md relative overflow-hidden">
+      {/* 3D Audio Visualizer Sphere */}
+      <div className="relative flex items-center justify-center -my-2">
+        <ThreeAudioSphere
+          isRecording={voice.recording}
+          className="w-40 h-40"
+        />
+        <button
+          onClick={voice.recording ? () => voice.stop(onStop) : () => voice.start(onStart)}
+          disabled={processing}
+          className={`absolute z-10 h-16 w-16 rounded-full flex items-center justify-center shadow-3d-button-primary transition-all cursor-pointer ${
+            processing
+              ? "bg-slate-400 cursor-not-allowed"
+              : voice.recording
+              ? "bg-rose-600 hover:bg-rose-700 shadow-3d-glow-rose scale-110"
+              : "bg-gradient-to-tr from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 hover:scale-105"
+          }`}
+          title={voice.recording ? "Stop Voice Statement" : "Start Voice Recording"}
+        >
+          {voice.recording ? <MicOff className="h-7 w-7 text-white" /> : <Mic className="h-7 w-7 text-white" />}
+        </button>
+      </div>
 
-      {voice.recording && (
-        <div className="flex items-end gap-1 h-6">
-          {[...Array(7)].map((_, i) => (
-            <div key={i} className="w-1.5 bg-red-400 rounded-full animate-bounce" style={{ height:`${10 + (i % 3) * 6}px`, animationDelay:`${i * 0.1}s` }} />
-          ))}
-        </div>
-      )}
-
-      <p className="text-sm text-gray-600 font-medium text-center px-4">
-        {voice.recording ? `🔴 Listening${voice.dots} — tap to stop` : processing ? "⏳ Processing…" : "🎙️ Tap to start recording"}
-      </p>
-      {!voice.recording && !processing && hint && (
-        <p className="text-xs text-gray-400 text-center px-6">{hint}</p>
-      )}
+      <div className="text-center space-y-1">
+        <p className="text-sm font-extrabold text-slate-800 flex items-center justify-center gap-1.5">
+          {voice.recording ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-rose-600">3D Audio Recording Active{voice.dots}</span>
+            </>
+          ) : processing ? (
+            <span className="text-blue-600">Processing Statement with Neural AI…</span>
+          ) : (
+            <span>Tap Microphone to Begin Statement</span>
+          )}
+        </p>
+        {!voice.recording && !processing && hint && (
+          <p className="text-xs text-slate-400 max-w-sm">{hint}</p>
+        )}
+      </div>
     </div>
   );
 

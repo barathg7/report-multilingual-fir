@@ -83,11 +83,135 @@ export function buildNativeShareMessage({ location, nearestStation, timestamp })
   ].join("\n");
 }
 
+// In-memory client-side idempotency set to prevent duplicate automatic dispatches
+const clientDispatchedSosIds = new Set();
+
+/**
+ * Dispatches an automated server-side emergency SMS alert to the 3 primary contacts
+ * via the Supabase Edge Function (httpSMS Android Gateway provider).
+ *
+ * @param {Object} params
+ * @param {string} params.sosId - ID of the created SOS record
+ * @param {string} params.stationCode - Jurisdictional police station code
+ * @param {string} params.message - Complete canonical SOS message
+ * @returns {Promise<Object>} Delivery response with state machine status
+ */
+export async function dispatchAutomaticSosSms({ sosId, stationCode, message }) {
+  if (!sosId) {
+    return {
+      success: false,
+      state: "SMS_PROVIDER_REJECTED",
+      error: "sosId is required for automated SMS dispatch",
+    };
+  }
+
+  // Client-side idempotency protection (Task 11)
+  if (clientDispatchedSosIds.has(sosId)) {
+    return {
+      success: false,
+      state: "SMS_PROVIDER_REJECTED",
+      error: "Duplicate dispatch blocked: SOS alert already submitted for SMS delivery.",
+    };
+  }
+  clientDispatchedSosIds.add(sosId);
+
+  try {
+    const { data, error } = await supabase.functions.invoke("send-sos-sms", {
+      body: {
+        sos_id: sosId,
+        station_code: stationCode,
+        message,
+      },
+    });
+
+    if (error) {
+      let parsedPayload = null;
+      try {
+        if (error.context && typeof error.context.json === "function") {
+          parsedPayload = await error.context.json();
+        } else if (error.context && typeof error.context.text === "function") {
+          const text = await error.context.text();
+          try {
+            parsedPayload = JSON.parse(text);
+          } catch {
+            parsedPayload = { error: text };
+          }
+        }
+      } catch (_) {}
+
+      const resolvedState =
+        parsedPayload?.state ||
+        data?.state ||
+        (error.context?.status === 503 ? "SMS_PROVIDER_NOT_CONFIGURED" : "SMS_PROVIDER_REJECTED");
+
+      const rawMsg = parsedPayload?.error || data?.error || "";
+      const isConfigError =
+        resolvedState === "SMS_PROVIDER_NOT_CONFIGURED" ||
+        rawMsg.includes("missing:") ||
+        rawMsg.includes("not configured") ||
+        error.context?.status === 503;
+
+      const finalState = isConfigError ? "SMS_PROVIDER_NOT_CONFIGURED" : resolvedState;
+      const finalError = rawMsg
+        ? rawMsg
+        : finalState === "SMS_PROVIDER_NOT_CONFIGURED"
+        ? "httpSMS Android gateway not configured on server."
+        : "httpSMS gateway rejected submission";
+
+      return {
+        success: false,
+        state: finalState,
+        error: finalError,
+        details: parsedPayload || data,
+      };
+    }
+
+    return (
+      data || {
+        success: true,
+        state: "SMS_SUBMITTED",
+        message: "SOS SMS submitted to 3 emergency contacts.",
+      }
+    );
+  } catch (err) {
+    let parsedPayload = null;
+    try {
+      if (err?.context && typeof err.context.json === "function") {
+        parsedPayload = await err.context.json();
+      }
+    } catch (_) {}
+
+    const resolvedState =
+      parsedPayload?.state ||
+      (err?.context?.status === 503 ? "SMS_PROVIDER_NOT_CONFIGURED" : "SMS_PROVIDER_REJECTED");
+
+    const rawMsg = parsedPayload?.error || err?.message || "";
+    const isConfigError =
+      resolvedState === "SMS_PROVIDER_NOT_CONFIGURED" ||
+      rawMsg.includes("missing:") ||
+      rawMsg.includes("not configured") ||
+      err?.context?.status === 503;
+
+    const finalState = isConfigError ? "SMS_PROVIDER_NOT_CONFIGURED" : resolvedState;
+    const finalError = rawMsg && !rawMsg.includes("non-2xx")
+      ? rawMsg
+      : finalState === "SMS_PROVIDER_NOT_CONFIGURED"
+      ? "httpSMS Android gateway not configured on server."
+      : "Network error dispatching automated SMS";
+
+    return {
+      success: false,
+      state: finalState,
+      error: finalError,
+      details: parsedPayload,
+    };
+  }
+}
+
 /**
  * Generates an individual native `sms:+91...?body=...` URI.
  * Strictly verifies that the recipient belongs to the authorized whitelist.
- * Note: Native sms: URIs only open the user's messaging app with a pre-filled draft;
- * they do NOT automatically send or confirm delivery.
+ * (Retained for backwards-compatibility; Stage 6.6 uses server-side automated dispatch).
  *
  * @param {string} phone - Must be in AUTHORIZED_SOS_RECIPIENTS
  * @param {string} message - Emergency message content
@@ -121,6 +245,15 @@ export function buildSOSInsertPayload({
   nearestStation,
   message,
   userId = null,
+  emergencyType = "OTHER_CRITICAL_EMERGENCY",
+  priority = "HIGH",
+  threatLevel = "ACTIVE_THREAT",
+  victimStatus = "REQUIRES_ASSISTANCE",
+  incidentFacts = {},
+  incidentTimeline = [],
+  source = "WEB_QUICKSHIELD",
+  safetagDeviceId = null,
+  safetagEventId = null,
 }) {
   const lat = Number(latitude);
   const lng = Number(longitude);
@@ -138,6 +271,15 @@ export function buildSOSInsertPayload({
     maps_url: mapsUrl,
     message: message || "SOS — immediate assistance requested.",
     status: "active",
+    emergency_type: emergencyType,
+    priority,
+    threat_level: threatLevel,
+    victim_status: victimStatus,
+    incident_facts: incidentFacts,
+    incident_timeline: incidentTimeline,
+    source,
+    safetag_device_id: safetagDeviceId,
+    safetag_event_id: safetagEventId,
   };
 }
 

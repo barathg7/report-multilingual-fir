@@ -12,7 +12,12 @@ import {
   Fingerprint,
   ChevronRight,
   Radio,
+  Sparkles,
+  Layers,
+  Cpu,
 } from "lucide-react";
+import ThreeShieldHologram from "@/components/ui/ThreeShieldHologram";
+import Card3D from "@/components/ui/Card3D";
 
 const HIGHLIGHT_LANGUAGES = [
   { native: "தமிழ்",   english: "Tamil"     },
@@ -28,40 +33,40 @@ const HIGHLIGHT_LANGUAGES = [
 ];
 
 const TRUST_BADGES = [
-  { label: "BNS 2023 Compliant",      icon: FileText    },
-  { label: "End-to-End Encrypted",    icon: Fingerprint  },
-  { label: "3,500+ Jurisdictions",    icon: Building2   },
-  { label: "40+ Languages Supported", icon: Globe2      },
+  { label: "BNS 2023 Compliant",      icon: FileText,    color: "text-blue-500" },
+  { label: "End-to-End Encrypted",    icon: Fingerprint, color: "text-cyan-500" },
+  { label: "3,500+ Jurisdictions",    icon: Building2,   color: "text-emerald-500" },
+  { label: "40+ Languages Supported", icon: Globe2,      color: "text-indigo-500" },
 ];
 
 const FEATURE_PILLARS = [
   {
     icon: Mic,
-    bg:   "bg-civic-blue-50",
-    text: "text-civic-blue-700",
+    bg:   "bg-blue-500/10 border border-blue-500/20 text-blue-600",
+    glow: "rgba(59, 130, 246, 0.2)",
     title: "Voice-First Reporting",
-    desc:  "Speak naturally in your dialect. Speech recognition captures and transcribes your spoken statement in real-time.",
+    desc:  "Speak naturally in your dialect. Advanced AI captures, cleans, and transcribes spoken audio into an official record in real-time.",
   },
   {
-    icon: UserCheck,
-    bg:   "bg-indigo-50",
-    text: "text-indigo-700",
-    title: "Human Verification",
-    desc:  "AI suggests incident fields and relevant BNS 2023 sections. You verify and confirm every entry before submission.",
+    icon: Cpu,
+    bg:   "bg-indigo-500/10 border border-indigo-500/20 text-indigo-600",
+    glow: "rgba(99, 102, 241, 0.2)",
+    title: "BNS 2023 Neural Mapping",
+    desc:  "AI analyzes your narrative to recommend accurate legal sections under Bharatiya Nyaya Sanhita with legal citations.",
   },
   {
     icon: Building2,
-    bg:   "bg-emerald-50",
-    text: "text-emerald-700",
-    title: "Station Jurisdiction",
-    desc:  "GPS mapping automatically determines the correct jurisdiction across 3,500+ police stations nationwide.",
+    bg:   "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600",
+    glow: "rgba(16, 185, 129, 0.2)",
+    title: "Station GPS Jurisdiction",
+    desc:  "High-precision geospatial triangulation routes your statement to the exact local police station across 3,500+ stations.",
   },
   {
     icon: FileText,
-    bg:   "bg-amber-50",
-    text: "text-amber-700",
-    title: "Official State DOCX",
-    desc:  "Downloads certified bilingual FIR documents in official state-specific templates ready for court submission.",
+    bg:   "bg-amber-500/10 border border-amber-500/20 text-amber-600",
+    glow: "rgba(245, 158, 11, 0.2)",
+    title: "Certified State DOCX",
+    desc:  "Exports official bilingual FIR documents with digital verification ready for judicial submission and station intake.",
   },
 ];
 
@@ -73,252 +78,287 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans selection:bg-civic-blue-600 selection:text-white relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col font-sans selection:bg-blue-600 selection:text-white relative overflow-x-hidden civic-mesh-bg">
 
-      {/* ── AMBIENT MESH BACKGROUND ── */}
-      <div className="fixed inset-0 -z-10 pointer-events-none">
-        <div className="absolute inset-0 bg-slate-50" />
-        {/* Top-left civic-blue ambient glow */}
-        <div className="absolute -top-48 -left-48 w-[640px] h-[640px] rounded-full bg-civic-blue-500/5 blur-3xl" />
-        {/* Bottom-right navy ambient glow */}
-        <div className="absolute -bottom-40 -right-40 w-[520px] h-[520px] rounded-full bg-civic-navy-800/4 blur-3xl" />
-        {/* Subtle noise texture */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.018]" xmlns="http://www.w3.org/2000/svg">
-          <filter id="lp-noise">
-            <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
-            <feColorMatrix type="saturate" values="0" />
-          </filter>
-          <rect width="100%" height="100%" filter="url(#lp-noise)" />
-        </svg>
+      {/* ── AMBIENT 3D MESH & RADAR BACKGROUND ── */}
+      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
+        {/* Deep background ambient glowing spheres */}
+        <div className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full bg-blue-500/10 blur-[120px] animate-pulse-slow" />
+        <div className="absolute top-1/3 -right-32 w-[500px] h-[500px] rounded-full bg-cyan-400/10 blur-[130px] animate-pulse-slow" />
+        <div className="absolute -bottom-40 left-1/4 w-[650px] h-[650px] rounded-full bg-indigo-600/10 blur-[140px]" />
+
+        {/* Spatial Hologram Grid */}
+        <div className="absolute inset-0 hologram-grid opacity-60" />
       </div>
 
-      {/* ── STICKY GLASSMORPHIC NAV ── */}
-      <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      {/* ── STICKY GLASSMORPHIC CYBER NAV ── */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 shadow-3d-card ambient-lighting">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
 
-          {/* Brand lockup */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-civic-navy-900 flex items-center justify-center
-              shadow-[0_4px_12px_-2px_rgba(15,23,42,0.35),0_1px_0_0_rgba(255,255,255,0.08)_inset]">
-              <Shield className="w-[18px] h-[18px] text-civic-blue-400" />
+          {/* Brand lockup with 3D Tactile Emblem */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center shadow-3d-button-primary border border-cyan-400/30">
+              <Shield className="w-5 h-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
             </div>
             <div className="flex flex-col leading-none">
-              <span className="font-extrabold text-[15px] text-civic-navy-900 tracking-tight">REPORT</span>
-              <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">Public Service Platform</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-base text-slate-900 tracking-tight">REPORT</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 uppercase">
+                  3D AI
+                </span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase mt-0.5">
+                Tamil Nadu Police System
+              </span>
             </div>
           </div>
 
           {/* Nav actions */}
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-2">
             <button
               id="nav-citizen-login"
               onClick={() => navigate("/citizen-login")}
-              className="text-xs font-semibold text-slate-600 hover:text-civic-blue-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors min-h-[40px]"
+              className="text-xs font-semibold text-slate-600 hover:text-blue-700 px-3.5 py-2 rounded-xl hover:bg-blue-50/70 transition-all min-h-[40px] flex items-center gap-1.5"
             >
+              <UserCheck className="w-3.5 h-3.5 text-blue-600" />
               Citizen Login
             </button>
             <button
               id="nav-track-complaint"
               onClick={() => navigate("/fir-history")}
-              className="hidden sm:inline-flex text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors min-h-[40px]"
+              className="hidden sm:inline-flex text-xs font-semibold text-slate-600 hover:text-slate-900 px-3.5 py-2 rounded-xl hover:bg-slate-100 transition-colors min-h-[40px]"
             >
               Track Complaint
             </button>
             <button
               id="nav-police-portal"
               onClick={() => navigate("/police-login")}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700
-                hover:text-civic-blue-700 px-3 py-2 rounded-lg border border-slate-200
-                hover:border-civic-blue-300 hover:bg-civic-blue-50/60 transition-all min-h-[40px]
-                shadow-[0_1px_3px_0_rgba(15,23,42,0.06)]"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800
+                hover:text-blue-700 px-3.5 py-2 rounded-xl border border-slate-200/90
+                hover:border-blue-400 hover:bg-blue-50/80 transition-all min-h-[40px]
+                shadow-3d-button active:translate-y-0.5 bg-white"
             >
-              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <Lock className="w-3.5 h-3.5 text-blue-600" />
               Police Portal
             </button>
           </nav>
         </div>
       </header>
 
-      {/* ── HERO SECTION ── */}
-      <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 pt-14 pb-20 w-full flex flex-col items-center text-center">
+      {/* ── HERO SECTION WITH 3D SHIELD HOLOGRAM ── */}
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 pt-10 pb-20 w-full flex flex-col items-center">
 
-        {/* Platform capsule */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-semibold mb-8
-          shadow-[0_1px_4px_0_rgba(15,23,42,0.06)]">
-          <span className="w-1.5 h-1.5 rounded-full bg-civic-blue-500 animate-pulse" />
-          <Globe2 className="w-3.5 h-3.5 text-civic-blue-600" />
-          <span>Multilingual Digital Police Reporting Platform</span>
+        {/* Top platform capsule */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-cyan-300/60 text-slate-700 text-xs font-semibold mb-6 shadow-3d-card hover:border-cyan-400 transition-all">
+          <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+          <span>Real-time Evidence Processing for Official Record Transcription</span>
         </div>
 
-        {/* H1 — one per page for SEO */}
-        <h1 className="text-3xl sm:text-[2.75rem] lg:text-5xl font-black text-civic-navy-900 tracking-tight max-w-3xl leading-[1.13] mb-5">
-          Explain what happened{" "}
-          <span className="text-civic-blue-700">in your own language.</span>
-          <br className="hidden sm:block" />
-          <span className="text-civic-navy-600 font-bold text-2xl sm:text-3xl lg:text-[2.25rem]">REPORT will help you structure it.</span>
-        </h1>
+        {/* 3D Split Hero Container */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mt-2 mb-12">
 
-        {/* Sub-headline */}
-        <p className="text-slate-500 text-sm sm:text-base max-w-2xl leading-relaxed mb-10">
-          A voice-first, AI-assisted platform that translates and structures citizen statements into official FIR records
-          compliant with{" "}
-          <strong className="text-slate-700 font-semibold">Bharatiya Nyaya Sanhita (BNS 2023)</strong>.
-          Every detail is reviewed and confirmed by you.
-        </p>
+          {/* Left Column: Typography & CTAs */}
+          <div className="lg:col-span-7 flex flex-col text-left space-y-6">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.1]">
+              Report Crimes Instantly{" "}
+              <span className="bg-gradient-to-r from-blue-700 via-indigo-600 to-cyan-500 bg-clip-text text-transparent drop-shadow-sm">
+                In Your Mother Tongue.
+              </span>
+            </h1>
 
-        {/* ── PRIMARY CTA PAIR ── */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mb-10">
-          <button
-            id="cta-file-complaint"
-            onClick={() => navigate("/record-statement")}
-            className="group w-full sm:w-auto inline-flex items-center justify-center gap-2.5
-              px-8 py-4 rounded-2xl font-bold text-base text-white transition-all
-              bg-civic-blue-700 hover:bg-civic-blue-800
-              shadow-[0_4px_20px_-4px_rgba(29,78,216,0.42),0_1px_0_0_rgba(255,255,255,0.1)_inset]
-              hover:shadow-[0_6px_28px_-4px_rgba(29,78,216,0.52)]
-              active:translate-y-0.5 active:shadow-[0_2px_8px_-2px_rgba(29,78,216,0.32)]"
-          >
-            <Mic className="w-5 h-5 text-civic-blue-200" />
-            <span>File a Complaint</span>
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-          </button>
+            <p className="text-slate-600 text-base sm:text-lg max-w-2xl leading-relaxed">
+              Experience India’s first voice-driven, AI-orchestrated public safety portal. Speak naturally in
+              any regional dialect. REPORT auto-transcribes, classifies under{" "}
+              <strong className="text-slate-900 font-bold underline decoration-blue-500/40">BNS 2023</strong>,
+              and generates judicial-grade legal records with real-time station jurisdiction.
+            </p>
 
-          <button
-            id="cta-police-login"
-            onClick={() => navigate("/police-login")}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2
-              px-6 py-4 rounded-2xl font-semibold text-sm text-slate-700
-              bg-white border border-slate-200
-              shadow-[0_2px_8px_-2px_rgba(15,23,42,0.08),0_1px_0_0_rgba(255,255,255,0.9)_inset]
-              hover:bg-slate-50 hover:border-slate-300
-              hover:shadow-[0_4px_14px_-4px_rgba(15,23,42,0.12)]
-              active:translate-y-0.5 transition-all"
-          >
-            <Lock className="w-4 h-4 text-slate-400" />
-            <span>Official Police Login</span>
-          </button>
-        </div>
+            {/* Primary Action Buttons with 3D Depth */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+              <button
+                id="cta-file-complaint"
+                onClick={() => navigate("/record-statement")}
+                className="group w-full sm:w-auto inline-flex items-center justify-center gap-3
+                  px-8 py-4 rounded-2xl font-bold text-base text-white transition-all
+                  bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 hover:from-blue-800 hover:to-indigo-800
+                  shadow-3d-button-primary hover:shadow-3d-glow-blue active:translate-y-0.5 cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center shadow-inner">
+                  <Mic className="w-4 h-4 text-white" />
+                </div>
+                <span>File New FIR Statement</span>
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              </button>
 
-        {/* ── TRUST BADGE STRIP ── */}
-        <div className="flex flex-wrap justify-center gap-2 mb-14">
-          {TRUST_BADGES.map(({ label, icon: Icon }) => (
-            <div
-              key={label}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                bg-white border border-slate-200 text-slate-500 text-xs font-medium
-                shadow-[0_1px_3px_0_rgba(15,23,42,0.05)]"
-            >
-              <Icon className="w-3.5 h-3.5 text-civic-blue-500" />
-              {label}
+              <button
+                id="cta-police-login"
+                onClick={() => navigate("/police-login")}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5
+                  px-6 py-4 rounded-2xl font-bold text-sm text-slate-800
+                  bg-white/90 backdrop-blur-md border border-slate-200/90
+                  shadow-3d-button hover:bg-slate-50 hover:border-slate-300
+                  active:translate-y-0.5 transition-all cursor-pointer"
+              >
+                <Lock className="w-4 h-4 text-blue-600" />
+                <span>Station Duty Terminal</span>
+              </button>
             </div>
-          ))}
+
+            {/* Trust Badges Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-4">
+              {TRUST_BADGES.map(({ label, icon: Icon, color }) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 backdrop-blur-sm border border-slate-200/80 text-slate-600 text-xs font-semibold shadow-sm"
+                >
+                  <Icon className={`w-3.5 h-3.5 ${color} shrink-0`} />
+                  <span className="truncate">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Column: Interactive 3D WebGL Hologram */}
+          <div className="lg:col-span-5 relative flex items-center justify-center min-h-[380px] sm:min-h-[460px]">
+            {/* Ambient Backlight for 3D Model */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/20 via-cyan-400/15 to-transparent rounded-3xl blur-2xl" />
+
+            {/* Glassmorphic 3D Stage Container */}
+            <div className="relative w-full h-[420px] rounded-3xl bg-gradient-to-b from-white/40 via-white/10 to-transparent border border-white/60 shadow-3d-card p-2 flex items-center justify-center overflow-hidden">
+              {/* Interactive Three.js Shield Hologram */}
+              <ThreeShieldHologram className="w-full h-full" />
+
+              {/* Floating 3D HUD Tags */}
+              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-950/70 backdrop-blur-md border border-cyan-400/30 text-[11px] font-mono font-bold text-cyan-300 shadow-md pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                <span>3D NEURAL FIR SYSTEM</span>
+              </div>
+
+              <div className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/80 backdrop-blur-md border border-slate-200 text-[11px] font-bold text-slate-700 shadow-sm pointer-events-none">
+                <Shield className="w-3 h-3 text-blue-600" />
+                <span>Interactive 3D Engine</span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
-        {/* ── FLOATING SOS DOSSIER CARD ── */}
-        <div className="w-full max-w-2xl mb-16">
-          <div className="relative">
-            {/* Ambient glow under card */}
-            <div className="absolute inset-x-12 -bottom-4 h-10 bg-rose-500/12 blur-xl rounded-full" />
-            <div className="relative p-4 sm:p-5 rounded-2xl bg-white border border-rose-200/70 overflow-hidden
-              shadow-[0_4px_24px_-4px_rgba(220,38,38,0.14),0_1px_0_0_rgba(255,255,255,0.9)_inset]">
-              {/* Rose accent bar */}
-              <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-rose-600 via-rose-500 to-rose-700 rounded-t-2xl" />
+        {/* ── 3D EMERGENCY SOS LIVE DISPATCH CARD ── */}
+        <div className="w-full max-w-4xl my-8">
+          <Card3D
+            maxTilt={6}
+            glowColor="rgba(244, 63, 94, 0.25)"
+            className="rounded-3xl"
+          >
+            <div className="relative p-6 sm:p-7 rounded-3xl bg-gradient-to-br from-rose-950/90 via-slate-900 to-rose-950 border border-rose-500/40 shadow-3d-glow-rose overflow-hidden text-white">
+              {/* Pulsing Radar Radial Background */}
+              <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full border border-rose-500/20 animate-ping pointer-events-none" />
+              <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-rose-500 via-amber-400 to-rose-500" />
 
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
                 <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0
-                    shadow-[0_4px_12px_-2px_rgba(220,38,38,0.4)]">
-                    <AlertOctagon className="w-5 h-5" />
+                  <div className="w-14 h-14 rounded-2xl bg-rose-600 flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/50 border border-rose-400">
+                    <AlertOctagon className="w-7 h-7 text-white animate-pulse" />
                   </div>
-                  <div className="text-left">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <p className="font-bold text-sm text-rose-950">Immediate Danger / Emergency?</p>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider
-                        text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
-                        <Radio className="w-2.5 h-2.5" />
-                        Live Dispatch
+                  <div className="text-left space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-extrabold text-lg sm:text-xl text-white">Immediate Danger or Threat?</h2>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-rose-300 bg-rose-900/60 border border-rose-500/50 px-2.5 py-0.5 rounded-full">
+                        <Radio className="w-3 h-3 text-rose-400 animate-pulse" />
+                        Live Nodal Dispatch
                       </span>
                     </div>
-                    <p className="text-xs text-rose-700/80">
-                      Broadcasts live GPS coordinates directly to the nearest police station.
+                    <p className="text-xs sm:text-sm text-rose-200/80 max-w-xl leading-relaxed">
+                      Transmits live GPS telemetry, nearest police station routing, and emergency audio distress directly to state nodal dispatch centers.
                     </p>
                   </div>
                 </div>
+
                 <button
                   id="sos-trigger-landing"
                   onClick={handleSOSClick}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2
-                    px-5 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white
-                    font-bold text-xs uppercase tracking-wider shrink-0 transition-all
-                    shadow-[0_4px_12px_-2px_rgba(185,28,28,0.4)]
-                    active:translate-y-0.5"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2.5
+                    px-7 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white
+                    font-black text-sm uppercase tracking-wider shrink-0 transition-all
+                    shadow-3d-button-danger hover:scale-102 active:scale-98 cursor-pointer"
                 >
-                  Trigger SOS
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>Trigger SOS</span>
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
-          </div>
+          </Card3D>
         </div>
 
-        {/* ── LANGUAGES SECTION ── */}
-        <div className="w-full max-w-3xl pt-10 border-t border-slate-200">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-5">
-            Voice &amp; Text Supported in 40+ Languages
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {HIGHLIGHT_LANGUAGES.map((l) => (
-              <span
-                key={l.english}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-                  bg-white border border-slate-200 text-xs font-medium cursor-default
-                  shadow-[0_1px_4px_0_rgba(15,23,42,0.06)]
-                  hover:shadow-[0_2px_8px_0_rgba(15,23,42,0.10)]
-                  hover:border-civic-blue-200 hover:-translate-y-0.5 transition-all"
-              >
-                <span className="font-bold text-civic-blue-700">{l.native}</span>
-                <span className="text-slate-400 text-[10px]">· {l.english}</span>
-              </span>
-            ))}
-            <span className="inline-flex items-center px-3 py-1.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200">
-              + 30 more
-            </span>
-          </div>
-        </div>
-
-        {/* ── FEATURE PILLARS ── */}
-        <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full text-left">
-          {FEATURE_PILLARS.map(({ icon: Icon, bg, text, title, desc }) => (
-            <div
+        {/* ── 3D FEATURE PILLARS MATRIX ── */}
+        <div className="mt-8 mb-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+          {FEATURE_PILLARS.map(({ icon: Icon, bg, glow, title, desc }) => (
+            <Card3D
               key={title}
-              className="group p-5 rounded-2xl bg-white border border-slate-200 space-y-3 transition-all
-                shadow-[0_2px_12px_-4px_rgba(15,23,42,0.08),0_1px_0_0_rgba(255,255,255,0.9)_inset]
-                hover:shadow-[0_6px_20px_-4px_rgba(15,23,42,0.12),0_1px_0_0_rgba(255,255,255,0.9)_inset]
-                hover:-translate-y-0.5"
+              maxTilt={8}
+              glowColor={glow}
+              className="h-full rounded-2xl"
             >
-              <div className={`w-9 h-9 rounded-xl ${bg} ${text} flex items-center justify-center transition-transform group-hover:scale-110`}>
-                <Icon className="w-[18px] h-[18px]" />
+              <div className="h-full p-6 rounded-2xl bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-3d-card hover:border-blue-300 transition-all flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className={`w-11 h-11 rounded-2xl ${bg} flex items-center justify-center shadow-sm`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-base text-slate-900">{title}</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                </div>
+                <div className="pt-2 border-t border-slate-100 flex items-center text-[11px] font-semibold text-blue-600 gap-1">
+                  <span>State-certified standard</span>
+                  <span>→</span>
+                </div>
               </div>
-              <div>
-                <h2 className="font-bold text-sm text-civic-navy-900 mb-1">{title}</h2>
-                <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
-              </div>
-            </div>
+            </Card3D>
           ))}
+        </div>
+
+        {/* ── INTERACTIVE 3D MULTILINGUAL MATRIX ── */}
+        <div className="w-full max-w-4xl pt-8 pb-12 border-t border-slate-200/80 text-center">
+          <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-400 mb-6">
+            <Globe2 className="w-4 h-4 text-blue-600" />
+            <span>Voice & Text Supported Across 40+ Official Dialects</span>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-2.5">
+            {HIGHLIGHT_LANGUAGES.map((l) => (
+              <div
+                key={l.english}
+                className="group inline-flex items-center gap-2 px-4 py-2 rounded-2xl
+                  bg-white/90 backdrop-blur-md border border-slate-200 text-xs font-semibold
+                  shadow-3d-card hover:shadow-3d-card-hover hover:border-blue-400 hover:-translate-y-1
+                  transition-all cursor-default select-none"
+              >
+                <span className="font-bold text-blue-700 text-sm group-hover:text-cyan-600 transition-colors">
+                  {l.native}
+                </span>
+                <span className="text-slate-400 text-[11px]">({l.english})</span>
+              </div>
+            ))}
+            <div className="inline-flex items-center px-4 py-2 rounded-2xl bg-blue-50/80 border border-blue-200/80 text-blue-700 text-xs font-bold shadow-sm">
+              + 30 more regional dialects
+            </div>
+          </div>
         </div>
 
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="bg-white border-t border-slate-200 py-6">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-          <p className="font-medium">REPORT — Real-time Evidence Processing for Official Record Transcription</p>
-          <div className="flex items-center gap-3 font-semibold">
-            <span className="text-civic-blue-600">BNS 2023 Compliant</span>
-            <span className="text-slate-200">·</span>
-            <span>Offline-Ready</span>
-            <span className="text-slate-200">·</span>
-            <span>Public Service AI</span>
+      <footer className="bg-white/90 backdrop-blur-xl border-t border-slate-200 py-6 ambient-lighting">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+          <p className="font-semibold text-slate-600">
+            REPORT — Real-time Evidence Processing for Official Record Transcription
+          </p>
+          <div className="flex items-center gap-3 font-bold">
+            <span className="text-blue-600">BNS 2023 Compliant</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-cyan-600">Offline-Capable</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-emerald-600">Government of Tamil Nadu</span>
           </div>
         </div>
       </footer>

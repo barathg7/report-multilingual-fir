@@ -3,7 +3,7 @@
 // then returns the 3 nearest stations across both sources.
 // This ensures local stations (which may not be in Supabase yet) are always found.
 
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabaseClient.js";
 
 function toRad(v) { return (v * Math.PI) / 180; }
 

@@ -190,7 +190,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    watch: {
+      ignored: ["**/report-multilingual-fir.zip", "**/*.zip", "**/.git/**", "**/dist/**"],
+    },
+  },
   build: {
     chunkSizeWarningLimit: 800,
     rollupOptions: {
@@ -207,6 +212,9 @@ export default defineConfig({
           }
           if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router-dom")) {
             return "vendor-react";
+          }
+          if (id.includes("node_modules/three")) {
+            return "vendor-three";
           }
           if (id.includes("node_modules/lucide-react")) {
             return "vendor-icons";

@@ -51,12 +51,27 @@ export const GESTURE_CODE = {
   PAIN: 'PAIN',
   YES: 'YES',
   NO: 'NO',
+  ATTACK: 'ATTACK',
+  HOSTAGE: 'HOSTAGE',
+  FIRE: 'FIRE',
+  MEDICAL: 'MEDICAL',
 };
 
 /**
  * Tokens that require explicit citizen dialog confirmation before addition
  */
-export const EMERGENCY_TOKENS = ['HELP', 'POLICE', 'ACCIDENT', 'THEFT', 'STOP', 'PAIN'];
+export const EMERGENCY_TOKENS = [
+  'HELP',
+  'POLICE',
+  'ACCIDENT',
+  'THEFT',
+  'STOP',
+  'PAIN',
+  'ATTACK',
+  'HOSTAGE',
+  'FIRE',
+  'MEDICAL'
+];
 
 /**
  * Conservative heuristic candidate match score gate.

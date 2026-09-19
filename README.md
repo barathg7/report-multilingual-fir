@@ -51,7 +51,7 @@ An AI-powered, multilingual First Information Report (FIR) filing system with a 
 - Project architecture and system design
 - Dual-portal routing (citizen + police)
 - BNS 2023 legal section classification logic
-- Emergency SOS module and Twilio / Fast2SMS integration
+- Emergency SOS module and httpSMS Android Gateway integration
 
 ### Bhagesri Ranjana V — [@Bhagesri01](https://github.com/Bhagesri01)
 - Documentation and README
@@ -77,7 +77,9 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 | `VITE_SUPABASE_URL` | ✅ Yes | Database — FIR storage, police-station lookup |
 | `VITE_SUPABASE_ANON_KEY` | ✅ Yes | Database — public anon key |
 | `VITE_MAPTILER_KEY` | ✅ Yes | Satellite / hybrid / street crime-scene map |
-| `FAST2SMS_API_KEY` | ✅ Yes | Emergency SOS SMS to Indian police numbers (+91) |
+| `HTTPSMS_API_KEY` | ✅ Yes (Edge Function secret) | httpSMS API key for Android gateway SMS dispatch |
+| `HTTPSMS_FROM_NUMBER` | ✅ Yes (Edge Function secret) | Sender phone number matching physical SIM in Android phone (+91...) |
+| `HTTPSMS_WEBHOOK_SIGNING_KEY` | Optional (Edge Function secret) | Webhook signing key for verifying delivery callbacks |
 | `TWILIO_ACCOUNT_SID` | Optional | Emergency SOS SMS fallback (international numbers) |
 | `TWILIO_AUTH_TOKEN` | Optional | Twilio authentication |
 | `TWILIO_PHONE_NUMBER` | Optional | Twilio sender number |
@@ -86,7 +88,7 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 | `VITE_NGC_FLUX_API_KEY` | Optional | Suspect sketch — backup provider (NVIDIA NIM Flux) |
 
 > **Sketch** always works with zero keys — falls through to free **Pollinations AI** then **Hugging Face** automatically.
-> **Fast2SMS** is the recommended SMS provider for Indian numbers. Get a free API key at [fast2sms.com](https://fast2sms.com).
+> **httpSMS Android Gateway** is the automated SMS provider for emergency contacts. See setup guide in [`docs/HTTPSMS_GATEWAY_SETUP.md`](docs/HTTPSMS_GATEWAY_SETUP.md).
 
 ---
 
@@ -100,6 +102,38 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 | Data scope | Own session's FIRs only (privacy-scoped by `sessionId`) | Only FIRs whose `station_code` matches the logged-in station |
 | Document | Client-side `.docx` generation (no server call) | Server-side `.docx` via `POST /api/generate-fir` |
 | Extra actions | Emergency SOS button | Update status, flag Fake FIR, download official document |
+
+---
+
+## 🛡️ REPORT Universal Emergency System
+
+REPORT has been upgraded from a simple SOS panic ping into a full-scale, omni-channel crisis intelligence system:
+
+### 1. REPORT QuickShield
+- **Instant Activation**: Single-touch emergency trigger with zero screen navigation.
+- **Global Keyboard Shortcut**: `Ctrl + Shift + E` triggers emergency mode from any citizen page.
+- **Web Speech Activation**: Hands-free voice trigger ("Help", "Emergency", "Kavalan", "Police") via browser Web Speech API.
+- **Universal Emergency Mode**: 5 high-contrast macro buttons (`ATTACK/THREAT`, `HOSTAGE/INTRUSION`, `MEDICAL`, `FIRE/DISASTER`, `CAN'T EXPLAIN`).
+- **No-Communication Mode**: Complete silent mode with audio suppression and tactile vibration feedback.
+
+### 2. REPORT Crisis Intelligence Engine (CIE)
+- **Living Incidents**: Incidents evolve over time instead of expiring as static pings.
+- **Append-Only Timeline**: Every event (activation, facts update, threat escalation, police acknowledgement) is permanently recorded with actor and timestamp.
+- **Structured Facts Aggregation**: Captures weapons present, suspect count, and safe shelter status via the **Adaptive Emergency Interview**.
+- **Deterministic Priority Engine**: Priority is computed algorithmically from verified facts (weapons, threats, entrapment) without speculative AI labeling.
+- **Strict Anti-Downgrade Governance**: Threats can escalate dynamically from citizen updates; de-escalation requires authenticated police command action.
+
+### 3. SafeTag BLE Hardware Architecture
+- **ESP32 BLE GATT Specification**: 128-bit service and characteristic UUIDs for emergency trigger uplink and police acknowledgement downlink.
+- **Tactile Inputs & Debounce**: 50ms debounce, 3000ms continuous hold for General SOS, 400ms double-press for Physical Threat, 10s cancellation grace window.
+- **Downstream 2-Pulse Acknowledgement**: When police claim an incident, the citizen's device / SafeTag simulator responds with a 2-pulse vibration pattern (`[300ms, 150ms, 300ms]`).
+- **Hardware Simulator**: An interactive browser-based hardware simulator labeled `"SAFE TAG SIMULATOR — DEMO HARDWARE"` for live testing without physical hardware.
+
+### 📚 Detailed Technical Architecture Documentation
+- 📘 [Universal Emergency System Architecture](docs/UNIVERSAL_EMERGENCY_SYSTEM.md)
+- 📗 [Crisis Intelligence Engine (CIE) Specification](docs/CRISIS_INTELLIGENCE_ENGINE.md)
+- 📙 [SafeTag Hardware Integration Architecture](docs/SAFETAG_HARDWARE_ARCHITECTURE.md)
+- 📕 [Accessibility & Non-Verbal Interaction Design](docs/ACCESSIBILITY_EMERGENCY_DESIGN.md)
 
 ---
 
@@ -151,7 +185,7 @@ It goes only to `incidentDescription` and **never touches** `legalSuggestions`, 
 | Crime-scene map | **MapTiler SDK** (satellite/hybrid/streets/topo) + triple-geocoder (MapTiler → Nominatim → Photon) + Overpass API POI labels |
 | AI suspect sketch | 5-provider cascade: **Cloudflare Workers AI** → **NVIDIA NIM SDXL** → **NVIDIA NIM Flux** → **Pollinations AI** → **Hugging Face** |
 | FIR documents | 28 state/UT NCRB `.docx` templates, auto-selected by GPS state |
-| Emergency SOS | `EmergencySecurity.jsx` — GPS → nearest station lookup → **Fast2SMS** (Indian) / Twilio (international) |
+| Emergency SOS | `EmergencySecurity.jsx` — GPS → nearest station lookup → **httpSMS Android Gateway** (automatic SIM dispatch) |
 | Database | **Supabase** Postgres — station-isolated FIR storage, RLS policies, duplicate check |
 | Station directory | `policeStations.js` — **3,447 stations** across India with lat/lng |
 | Privacy | Session-scoped FIR display (`sessionStorage` ID) — each citizen sees only their own FIRs |
@@ -190,7 +224,7 @@ api/requirements.txt  →  python-docx==1.1.2
 REPORT_FRESH/
 ├── api/
 │   ├── generate-fir.py        ← Vercel serverless: fills matching state .docx
-│   └── send-sos.js            ← Vercel serverless: SMS via Fast2SMS / Twilio
+│   └── send-sos.js            ← Legacy fallback endpoint
 ├── public/
 │   └── fir_templates/         ← 28 official state/UT FIR .docx templates
 ├── screenshots/               ← App screenshots (add yours here)
@@ -246,16 +280,34 @@ REPORT_FRESH/
 
 ---
 
-## 🔐 Emergency SOS Module
+## 🛡️ REPORT Universal Emergency System
 
-The SOS button appears on all citizen pages except during FIR filing (to avoid covering the Next button). When tapped:
+The Universal Emergency System upgrades conventional static SOS panic alerts into an omni-channel crisis intelligence ecosystem:
 
-1. Gets victim's GPS coordinates
-2. Queries Supabase for the **3 nearest police stations** (Haversine distance)
-3. Sends SMS via **Fast2SMS** (Indian numbers) or **Twilio** (fallback)
-4. Displays station name, distance and delivery status
+1. **REPORT QuickShield**: Instantaneous emergency triggering without app navigation:
+   - **Global Hotkey**: `Ctrl+Shift+E` opens emergency terminal instantly.
+   - **Direct Deep Link**: `#quickshield` or `?sos=quickshield`.
+   - **Web Speech API**: Listens for emergency keywords ("help", "emergency", "police", "kavalan").
+   - **Universal Emergency Mode**: 5 rapid direct touch targets (`ATTACK / THREAT`, `HOSTAGE / INTRUSION`, `MEDICAL`, `FIRE / DISASTER`, `CAN'T EXPLAIN — IMMEDIATE HELP`).
+   - **No-Communication Mode**: Silent emergency mode with audio suppression and single-tap binary updates (`[ NEED HELP ]` / `[ I'M SAFE ]`).
+   - **Adaptive Emergency Interview**: Collects 4 non-blocking structured facts (threat proximity, weapons visible, suspects count, safe shelter) without delaying the initial SOS.
 
-The floating button is hidden on `/record-statement` and `/police-dashboard` via `useLocation()`.
+2. **REPORT Crisis Intelligence Engine (CIE)**:
+   - Transforms alerts into living, evolving incident records stored in Supabase with append-only timelines.
+   - Non-downgrading threat evolution: `UNKNOWN` → `SUSPICIOUS_ACTIVITY` → `ACTIVE_THREAT` → `CRITICAL_THREAT` → `ACKNOWLEDGED` → `RESOLVED`.
+   - Strict provenance tracking (`source`, `confidence`, `user_confirmed`, `timestamp`, `location`, `accuracy`).
+   - Categorical emergency taxonomy with zero AI speculation on criminal identities.
+
+3. **REPORT SafeTag Hardware Integration Architecture**:
+   - ESP32 BLE GATT protocol (`0000ffe0` service, `0000ffe1` trigger, `0000ffe2` ack, `0000ffe3` telemetry).
+   - Accidental trigger protection: 50ms debounce, 3s long-press for General SOS, double-press for Physical Threat, secondary button for Medical, 5s cancel hold.
+   - Interactive browser hardware simulator with explicit `"SAFE TAG SIMULATOR — DEMO HARDWARE"` branding.
+   - Real-time command center acknowledgement with 2-pulse haptic vibration pattern (`[300, 150, 300]ms`).
+
+4. **httpSMS Android Gateway Dispatch**:
+   - Automated server-side SMS via physical SIM card on dedicated Android gateway phone.
+   - Strict authorized recipient whitelist (3 primary, 3 reserve).
+   - Truthful state transitions (`SMS_SUBMITTED` → `SMS_DELIVERY_CONFIRMED`). Demo simulation is unmistakably tagged with `[DEMO SIMULATION]`.
 
 ---
 
@@ -266,4 +318,4 @@ The default insecure password (`police123`) has been **disabled**. Contact your 
 
 ---
 
-**Keywords:** Multilingual FIR · Groq AI Extraction · BNS 2023 · AI Suspect Sketch · GPS Crime Mapping · Dual Portal · Supabase · Offline-First · Fast2SMS · Emergency SOS
+**Keywords:** Multilingual FIR · Groq AI Extraction · BNS 2023 · AI Suspect Sketch · GPS Crime Mapping · Dual Portal · Supabase · Offline-First · httpSMS Android Gateway · Universal Emergency System · QuickShield · Crisis Intelligence Engine · SafeTag ESP32 BLE

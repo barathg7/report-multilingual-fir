@@ -1198,23 +1198,23 @@ export default function RecordStatement() {
 
   /* ── Page shell ──────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen civic-mesh-bg">
 
       {/* ── Sticky header ── */}
-      <div className="bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-[0_1px_4px_0_rgba(15,23,42,0.06)]">
+      <div className="bg-white/85 backdrop-blur-xl border-b border-slate-200/80 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm ambient-lighting">
         <div className="flex items-center gap-3">
           {/* Brand mark */}
-          <div className="w-8 h-8 rounded-xl bg-civic-navy-900 flex items-center justify-center shrink-0 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.3)]">
-            <Shield className="h-4 w-4 text-civic-blue-400" aria-hidden="true" />
+          <div className="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center shrink-0 shadow-3d-button-primary border border-cyan-400/30">
+            <Shield className="h-4 w-4 text-cyan-400" aria-hidden="true" />
           </div>
           <div className="leading-none">
-            <h1 className="text-[13px] font-extrabold text-civic-navy-900 tracking-tight">REPORT — New Complaint</h1>
+            <h1 className="text-[13px] font-extrabold text-slate-900 tracking-tight">REPORT — Digital Statement Lodging</h1>
             <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
               Step {step + 1} of {STEPS.length}
               <span aria-hidden="true">·</span>
               {isOnline
-                ? <span className="flex items-center gap-0.5 text-emerald-600"><Wifi className="h-2.5 w-2.5" aria-hidden="true" />Online</span>
-                : <span className="flex items-center gap-0.5 text-rose-600"><WifiOff className="h-2.5 w-2.5" aria-hidden="true" />Offline</span>
+                ? <span className="flex items-center gap-0.5 text-emerald-600 font-bold"><Wifi className="h-2.5 w-2.5" aria-hidden="true" />Online</span>
+                : <span className="flex items-center gap-0.5 text-rose-600 font-bold"><WifiOff className="h-2.5 w-2.5" aria-hidden="true" />Offline</span>
               }
             </p>
           </div>
@@ -1224,17 +1224,17 @@ export default function RecordStatement() {
               type="button"
               onClick={() => setStep(0)}
               title="Click to switch statement language"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-civic-blue-50 border border-civic-blue-200 text-civic-blue-800 text-xs font-semibold hover:bg-civic-blue-100 hover:border-civic-blue-300 transition-all cursor-pointer min-h-[32px]"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-all cursor-pointer min-h-[32px] shadow-2xs"
             >
               <span>{lang.flag || "🌐"} {lang.native}</span>
-              <span className="text-[10px] text-civic-blue-500 font-medium">· Change</span>
+              <span className="text-[10px] text-blue-500 font-medium">· Change</span>
             </button>
           )}
         </div>
         {/* Back button — shown on mobile only; desktop uses the nav bar below */}
         <button
           onClick={() => step > 0 ? setStep(s => s - 1) : window.history.back()}
-          className="sm:hidden text-xs font-semibold text-slate-500 hover:text-civic-navy-900 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors min-h-[36px]"
+          className="sm:hidden text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors min-h-[36px]"
           aria-label="Go back"
         >
           ← Back
@@ -1245,8 +1245,8 @@ export default function RecordStatement() {
       <StepBar steps={STEPS} current={step} onStepClick={setStep} />
 
       {/* ── Step content ── */}
-      <div className="max-w-2xl mx-auto px-4 py-6 pb-28 sm:pb-10">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] p-5 sm:p-6 min-h-64">
+      <div className="max-w-3xl mx-auto px-4 py-8 pb-28 sm:pb-12">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/90 shadow-3d-card p-6 sm:p-8 min-h-64">
           {renderStep()}
         </div>
 

@@ -238,11 +238,11 @@ runTest("CRITERION 10: UI never claims SMS delivery (no 'SMS sent', 'SMS deliver
   assert.doesNotMatch(content, />\s*SMS delivered\s*</i);
   assert.doesNotMatch(content, />\s*Sent successfully\s*</i);
 
-  // Truthful feedback text must be present
-  assert.match(content, /Emergency SOS message prepared for Contact/);
-  assert.match(content, /Tap Send in your Messages app\./);
-  assert.match(content, /Delivery Truthfulness Note:/);
-  assert.match(content, /We do not claim background or automatic SMS delivery\./);
+  // Truthful automated feedback text
+  assert.match(content, /SOS SMS submitted to 3 emergency contacts/);
+  assert.match(content, /AUTOMATIC SOS SMS/);
+  assert.doesNotMatch(content, /Tap Send/);
+  assert.doesNotMatch(content, /"Open SMS"/);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -27,6 +27,28 @@ function AppRoutes() {
     return () => window.removeEventListener("open-sos-panel", handler);
   }, []);
 
+  // Global QuickShield Triggers: Ctrl+Shift+E and deep links (#quickshield / ?sos=quickshield)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "E" || e.key === "e")) {
+        e.preventDefault();
+        setShowEmergency(true);
+      }
+    };
+    const checkDeepLink = () => {
+      if (window.location.hash.includes("quickshield") || window.location.search.includes("quickshield")) {
+        setShowEmergency(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("hashchange", checkDeepLink);
+    checkDeepLink();
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("hashchange", checkDeepLink);
+    };
+  }, []);
+
   return (
     <>
       <Routes>

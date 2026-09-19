@@ -333,20 +333,15 @@ runTest("TEST 10: UI components guarantee truthful delivery status (no hardcoded
   );
   const fileContent = fs.readFileSync(emergencyComponentPath, "utf-8");
 
-  // Verify button text and explicit truthful section requirements:
-  assert.match(fileContent, /"Share SOS"/);
-  assert.match(fileContent, /OPEN SOS SMS/);
-  assert.match(fileContent, /Open SOS SMS/);
-  assert.match(fileContent, /Your phone's Messages app will open/);
+  // Verify automated section requirements:
   assert.match(fileContent, /AUTOMATIC POLICE ALERT/);
   assert.match(fileContent, /SOS alert delivered to police dashboard/);
-  assert.match(fileContent, /PRIMARY SOS CONTACTS/);
-  assert.match(fileContent, /3 contacts will be notified through the phone's messaging app/);
-  assert.match(fileContent, /BACKUP CONTACTS/);
-  assert.match(fileContent, /3 contacts configured/);
-  assert.match(fileContent, /Emergency SOS message prepared for Contact/);
-  assert.match(fileContent, /Tap Send in your Messages app\./);
-  assert.match(fileContent, /Share sheet opened\. Delivery depends on the selected messaging app\./);
+  assert.match(fileContent, /AUTOMATIC SOS SMS/);
+  assert.match(fileContent, /3 primary emergency contacts/);
+  assert.match(fileContent, /SEND SOS TO 3 CONTACTS/);
+  assert.match(fileContent, /SOS SMS submitted to 3 emergency contacts/);
+  assert.doesNotMatch(fileContent, /Tap Send/);
+  assert.doesNotMatch(fileContent, /"Open SMS"/);
 
   // Verify that deceptive delivery strings are NEVER used
   assert.doesNotMatch(fileContent, />\s*SMS sent\s*</i);

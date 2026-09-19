@@ -299,9 +299,9 @@ runTest("TEST 12: No UI string in EmergencySecurity.jsx claims SMS delivery with
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEST 13 — Emergency contacts UI section explicitly states draft opening and Stage 6.5 contact configuration
+// TEST 13 — Emergency contacts UI section explicitly verifies automated SMS dispatch without native composer
 // ─────────────────────────────────────────────────────────────────────────────
-runTest("TEST 13: Emergency contacts UI section explicitly states draft opening and Stage 6.5 contact configuration", () => {
+runTest("TEST 13: Emergency contacts UI section explicitly verifies automated SMS dispatch without native composer", () => {
   const componentPath = path.join(projectRoot, "src", "components", "kavalan", "EmergencySecurity.jsx");
   const content = fs.readFileSync(componentPath, "utf-8");
 
@@ -309,15 +309,12 @@ runTest("TEST 13: Emergency contacts UI section explicitly states draft opening 
   assert.match(content, /SOS alert delivered to police dashboard/);
   assert.match(content, /Location shared/);
   assert.match(content, /Nearest station identified/);
-  assert.match(content, /PRIMARY SOS CONTACTS/);
-  assert.match(content, /3 contacts will be notified through the phone's messaging app/);
-  assert.match(content, /Backup contacts: 3/);
-  assert.match(content, /BACKUP CONTACTS/);
-  assert.match(content, /3 contacts configured/);
-  assert.match(content, /OPEN SOS SMS/);
-  assert.match(content, /Emergency SOS message prepared for Contact/);
-  assert.match(content, /Tap Send in your Messages app\./);
-  assert.match(content, /Share sheet opened\. Delivery depends on the selected messaging app\./);
+  assert.match(content, /AUTOMATIC SOS SMS/);
+  assert.match(content, /3 primary emergency contacts/);
+  assert.match(content, /SEND SOS TO 3 CONTACTS/);
+  assert.match(content, /SOS SMS submitted to 3 emergency contacts/);
+  assert.doesNotMatch(content, /Tap Send/);
+  assert.doesNotMatch(content, /"Open SMS"/);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

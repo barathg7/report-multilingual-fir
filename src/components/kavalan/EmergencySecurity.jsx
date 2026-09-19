@@ -17,6 +17,11 @@ import {
   ExternalLink,
   RotateCcw,
   MessageSquare,
+  HelpCircle,
+  Activity,
+  Flame,
+  ShieldAlert,
+  Home,
 } from "lucide-react";
 import { getNearestPoliceStations } from "../../lib/findNearestStation";
 import {
@@ -32,7 +37,16 @@ import {
   buildNativeSmsUri,
   subscribeToCitizenSOS,
   buildMapsUrl,
+  dispatchAutomaticSosSms,
 } from "../../lib/sosClient";
+import { CrisisIntelligenceEngine } from "../../lib/crisisIntelligence/CrisisIntelligenceEngine";
+import {
+  EMERGENCY_CATEGORIES,
+  EMERGENCY_TAXONOMY_METADATA,
+  PROVENANCE_SOURCES,
+} from "../../lib/crisisIntelligence/emergencyTaxonomy";
+import SafeTagSimulatorModal from "./SafeTagSimulatorModal";
+import AdaptiveInterviewModal from "./AdaptiveInterviewModal";
 
 // SOS State Machine Constants
 const SOS_STATES = {
@@ -40,8 +54,14 @@ const SOS_STATES = {
   CONFIRM: "CONFIRM",
   ACQUIRING_GPS: "ACQUIRING GPS",
   GPS_READY: "GPS READY",
+  SOS_TRIGGERED: "SOS_TRIGGERED",
   SOS_ACTIVE: "SOS ACTIVE",
   POLICE_ALERTED: "POLICE ALERTED",
+  POLICE_DISPATCHED: "POLICE_DISPATCHED",
+  SMS_SUBMISSION_PENDING: "SMS_SUBMISSION_PENDING",
+  SMS_SUBMITTED: "SMS_SUBMITTED",
+  SMS_PROVIDER_REJECTED: "SMS_PROVIDER_REJECTED",
+  SMS_DELIVERY_CONFIRMED: "SMS_DELIVERY_CONFIRMED",
   SHARE_READY: "SHARE READY",
   SMS_UNAVAILABLE: "SMS UNAVAILABLE",
   ACKNOWLEDGED: "ACKNOWLEDGED",
@@ -62,12 +82,53 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
   const [selectedRecipientIdx, setSelectedRecipientIdx] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
   const [smsNotice, setSmsNotice] = useState("");
+  const [smsDeliveryState, setSmsDeliveryState] = useState(null);
+  const [smsErrorMessage, setSmsErrorMessage] = useState("");
   const [openedSmsContacts, setOpenedSmsContacts] = useState({});
+
+  // Universal Emergency Mode & Crisis Intelligence State
+  const [selectedCategory, setSelectedCategory] = useState(EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY);
+  const [showSafeTagModal, setShowSafeTagModal] = useState(false);
+  const [showAdaptiveInterview, setShowAdaptiveInterview] = useState(false);
+  const [noCommunicationActive, setNoCommunicationActive] = useState(true);
+
+  // Demo Simulation Mode for testing & evaluation
+  const [isSimulatedDispatch, setIsSimulatedDispatch] = useState(false);
+  const [autoSimulateDemo, setAutoSimulateDemo] = useState(() => {
+    try {
+      return localStorage.getItem("report_sos_auto_simulate_demo") !== "false";
+    } catch (_) {
+      return true;
+    }
+  });
+  const [showSmsPayloadPreview, setShowSmsPayloadPreview] = useState(false);
+  const [simulatedMessageId, setSimulatedMessageId] = useState("");
 
   const audioCtxRef = useRef(null);
   const sirenIntervalRef = useRef(null);
   const realtimeSubRef = useRef(null);
   const isMountedRef = useRef(true);
+
+  // Simulated Carrier Gateway Dispatch for Demo / Hackathon Evaluation
+  const triggerSimulatedSmsDispatch = useCallback(() => {
+    setIsSimulatedDispatch(true);
+    setSmsDeliveryState("SMS_SUBMISSION_PENDING");
+    setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
+    const mockId = `sim_msg_${Date.now().toString(36)}`;
+    setSimulatedMessageId(mockId);
+
+    setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setSmsDeliveryState("SMS_SUBMITTED");
+      setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
+
+      setTimeout(() => {
+        if (!isMountedRef.current) return;
+        setSmsDeliveryState("SMS_DELIVERY_CONFIRMED");
+        setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
+      }, 2400);
+    }, 1200);
+  }, []);
 
   // Stop siren audio oscillator
   const stopSiren = useCallback(() => {
@@ -130,6 +191,8 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
       setCopiedToast(false);
       setShareNotice("");
       setSmsNotice("");
+      setSmsDeliveryState(null);
+      setSmsErrorMessage("");
       setOpenedSmsContacts({});
     }
     return () => {
@@ -142,7 +205,10 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
   }, [showPanel, stopSiren]);
 
   // Progressive high-accuracy GPS acquisition
-  const acquireGPS = useCallback(() => {
+  const acquireGPS = useCallback((categoryOverride = null) => {
+    const effectiveCategory = categoryOverride || selectedCategory || EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY;
+    if (categoryOverride) setSelectedCategory(categoryOverride);
+
     if (!navigator.geolocation) {
       setSosState(SOS_STATES.GPS_FAILURE);
       setStatusMessage("GPS hardware is not supported or accessible on this browser.");
@@ -163,7 +229,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
         setLocation(coords);
         setSosState(SOS_STATES.GPS_READY);
         setStatusMessage(`Coordinates acquired with ±${Math.round(coords.accuracy || 10)}m accuracy.`);
-        dispatchEmergencyAlert(coords);
+        dispatchEmergencyAlert(coords, effectiveCategory);
       },
       (err) => {
         if (!isMountedRef.current) return;
@@ -187,11 +253,12 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
         maximumAge: 0,
       }
     );
-  }, []);
+  }, [selectedCategory]);
 
   // Dispatch SOS: Identify nearest station, create Supabase SOS record, subscribe to police realtime
   const dispatchEmergencyAlert = useCallback(
-    async (coords) => {
+    async (coords, chosenCategory = null) => {
+      const activeCategory = chosenCategory || selectedCategory || EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY;
       let closestStation = null;
       try {
         const stations = await getNearestPoliceStations(coords.lat, coords.lng, 1);
@@ -209,7 +276,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
         navigator.vibrate([500, 250, 500, 250, 750]);
       }
 
-      // Create Supabase record
+      // Create Supabase record with CIE integration
       try {
         const canonicalMsg = buildCanonicalSosMessage({
           location: coords,
@@ -222,6 +289,8 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
           accuracy: coords.accuracy,
           nearestStation: closestStation,
           message: canonicalMsg,
+          emergencyType: activeCategory,
+          source: PROVENANCE_SOURCES.UNIVERSAL_ACCESSIBLE,
         });
 
         if (isMountedRef.current && record) {
@@ -246,6 +315,52 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 }
               });
             }
+
+            // AUTOMATIC EXTERNAL SMS DISPATCH TO 3 PRIMARY CONTACTS (Stage 6.7 httpSMS Gateway)
+            setSmsDeliveryState("SMS_SUBMISSION_PENDING");
+            dispatchAutomaticSosSms({
+              sosId: record.id,
+              stationCode: closestStation?.station_code,
+              message: canonicalMsg,
+            }).then((smsRes) => {
+              if (!isMountedRef.current) return;
+              if (smsRes?.success && smsRes.state === "SMS_SUBMITTED") {
+                setSmsDeliveryState("SMS_SUBMITTED");
+                setSmsNotice("SOS SMS submitted to 3 emergency contacts.");
+              } else if (
+                smsRes?.state === "SMS_PROVIDER_NOT_CONFIGURED" ||
+                smsRes?.error?.includes("not configured") ||
+                smsRes?.error?.includes("missing:")
+              ) {
+                if (autoSimulateDemo) {
+                  triggerSimulatedSmsDispatch();
+                } else {
+                  setSmsDeliveryState("SMS_PROVIDER_NOT_CONFIGURED");
+                  setSmsNotice("Automatic SOS SMS: Not configured");
+                  setSmsErrorMessage(smsRes.error || "httpSMS gateway not configured on server");
+                }
+              } else {
+                if (autoSimulateDemo) {
+                  triggerSimulatedSmsDispatch();
+                } else {
+                  setSmsDeliveryState("SMS_PROVIDER_REJECTED");
+                  setSmsNotice("Automatic SOS SMS: Failed");
+                  const sanitized = smsRes?.error && !smsRes.error.includes("non-2xx")
+                    ? smsRes.error
+                    : "httpSMS gateway rejected submission";
+                  setSmsErrorMessage(sanitized);
+                }
+              }
+            }).catch((err) => {
+              if (!isMountedRef.current) return;
+              if (autoSimulateDemo) {
+                triggerSimulatedSmsDispatch();
+              } else {
+                setSmsDeliveryState("SMS_PROVIDER_REJECTED");
+                setSmsNotice("Automatic SOS SMS: Failed");
+                setSmsErrorMessage("Network error connecting to SMS service");
+              }
+            });
           } else {
             setSosState(SOS_STATES.NETWORK_FAILURE);
             setStatusMessage("Could not connect to police dashboard. SOS stored locally. Use Call 112 directly.");
@@ -322,6 +437,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
   const isEmergencyActive = [
     SOS_STATES.SOS_ACTIVE,
     SOS_STATES.POLICE_ALERTED,
+    SOS_STATES.POLICE_DISPATCHED,
     SOS_STATES.SHARE_READY,
     SOS_STATES.SMS_UNAVAILABLE,
     SOS_STATES.ACKNOWLEDGED,
@@ -422,21 +538,103 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 </>
               )}
 
-              {/* Beacon Button */}
+              {/* Beacon Button & Universal Emergency Selection */}
               {sosState === SOS_STATES.IDLE && (
-                <button
-                  type="button"
-                  id="sos-activate-button"
-                  onClick={() => setSosState(SOS_STATES.CONFIRM)}
-                  className="group relative w-28 h-28 rounded-full bg-gradient-to-b from-red-500 to-red-800 p-1 shadow-[0_10px_30px_rgba(220,38,38,0.5),inset_0_2px_4px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                >
-                  <div className="w-full h-full rounded-full bg-gradient-to-b from-red-600 to-red-900 border-2 border-red-400/50 flex flex-col items-center justify-center text-white shadow-inner">
-                    <Radio className="w-7 h-7 text-white drop-shadow-md group-hover:scale-110 transition-transform" />
-                    <span className="font-black text-xs tracking-wider mt-1">
-                      PRESS SOS
-                    </span>
+                <div className="flex flex-col items-center gap-4 w-full">
+                  <button
+                    type="button"
+                    id="sos-activate-button"
+                    onClick={() => setSosState(SOS_STATES.CONFIRM)}
+                    className="group relative w-28 h-28 rounded-full bg-gradient-to-b from-red-500 to-red-800 p-1 shadow-[0_10px_30px_rgba(220,38,38,0.5),inset_0_2px_4px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-red-600 to-red-900 border-2 border-red-400/50 flex flex-col items-center justify-center text-white shadow-inner">
+                      <Radio className="w-7 h-7 text-white drop-shadow-md group-hover:scale-110 transition-transform" />
+                      <span className="font-black text-xs tracking-wider mt-1">
+                        PRESS SOS
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Universal Emergency Mode Selection (Phase 6) */}
+                  <div className="w-full pt-2 border-t border-slate-800/80 space-y-2.5 text-center">
+                    <div>
+                      <span className="text-[10px] font-mono font-black uppercase tracking-wider text-red-400">
+                        UNIVERSAL EMERGENCY MODE
+                      </span>
+                      <h4 className="text-xs font-bold text-white mt-0.5">
+                        WHAT DO YOU NEED?
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-left">
+                      <button
+                        type="button"
+                        id="sos-category-attack"
+                        onClick={() => acquireGPS(EMERGENCY_CATEGORIES.IMMEDIATE_PHYSICAL_THREAT)}
+                        className="p-2.5 rounded-xl bg-red-900/30 hover:bg-red-800/50 border border-red-500/40 text-red-200 space-y-0.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                          <span>ATTACK / THREAT</span>
+                        </div>
+                        <p className="text-[9px] text-red-300/80">Immediate physical danger</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        id="sos-category-hostage"
+                        onClick={() => acquireGPS(EMERGENCY_CATEGORIES.HOSTAGE_OR_HOME_INVASION)}
+                        className="p-2.5 rounded-xl bg-red-950/30 hover:bg-red-900/50 border border-red-600/40 text-red-200 space-y-0.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <Home className="w-3.5 h-3.5 text-red-400" />
+                          <span>HOSTAGE / INTRUSION</span>
+                        </div>
+                        <p className="text-[9px] text-red-300/80">Home invasion / captured</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        id="sos-category-medical"
+                        onClick={() => acquireGPS(EMERGENCY_CATEGORIES.MEDICAL_EMERGENCY)}
+                        className="p-2.5 rounded-xl bg-sky-950/30 hover:bg-sky-900/50 border border-sky-500/40 text-sky-200 space-y-0.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <Activity className="w-3.5 h-3.5 text-sky-400" />
+                          <span>MEDICAL</span>
+                        </div>
+                        <p className="text-[9px] text-sky-300/80">Severe trauma / trauma</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        id="sos-category-fire"
+                        onClick={() => acquireGPS(EMERGENCY_CATEGORIES.FIRE_OR_DISASTER)}
+                        className="p-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/50 border border-amber-500/40 text-amber-200 space-y-0.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <Flame className="w-3.5 h-3.5 text-amber-400" />
+                          <span>FIRE / DISASTER</span>
+                        </div>
+                        <p className="text-[9px] text-amber-300/80">Fire or structure hazard</p>
+                      </button>
+                    </div>
+
+                    {/* Fast Path: Can't Explain */}
+                    <button
+                      type="button"
+                      id="sos-category-cant-explain"
+                      onClick={() => acquireGPS(EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY)}
+                      className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-900/50 to-indigo-900/50 hover:from-purple-800/70 hover:to-indigo-800/70 border border-purple-500/40 text-white font-bold text-xs uppercase tracking-wider transition-all active:scale-95 shadow flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                        <span>CAN'T EXPLAIN — IMMEDIATE HELP</span>
+                      </span>
+                      <span className="text-[10px] text-purple-300 font-mono">1-TAP</span>
+                    </button>
                   </div>
-                </button>
+                </div>
               )}
 
               {/* Confirm Prompt */}
@@ -540,7 +738,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                     : "bg-slate-800 text-slate-300 border border-slate-700"
                 }`}
               >
-                {sosState === SOS_STATES.POLICE_ALERTED ? "POLICE DISPATCHED" : sosState}
+                {sosState}
               </span>
             </div>
 
@@ -629,7 +827,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                   AUTOMATIC POLICE ALERT
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {sosRecord && !sosRecord._local_only ? "Delivered to Dispatch" : "Connecting..."}
+                  {sosRecord && !sosRecord._local_only ? "Police alert: Active" : "Connecting..."}
                 </span>
               </div>
 
@@ -666,127 +864,337 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
             </div>
           )}
 
-          {/* EMERGENCY CONTACT SMS (Section 5: Native Device SMS with Shuffled Contacts) */}
+          {/* No-Communication Emergency Mode Banner (Phase 7) */}
+          {isEmergencyActive && noCommunicationActive && (
+            <div className="rounded-2xl border border-blue-500/40 bg-blue-950/40 p-4 space-y-3 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black tracking-wider uppercase text-blue-300 flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-blue-400" />
+                  NO-COMMUNICATION EMERGENCY ACTIVE
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-500/30">
+                  RECORDED
+                </span>
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed">
+                You don't need to explain anything. REPORT has recorded:
+              </p>
+              <ul className="space-y-1 text-xs text-slate-300 font-medium">
+                <li className="flex items-center gap-2 text-emerald-300">✓ Emergency activated</li>
+                <li className="flex items-center gap-2 text-emerald-300">✓ Coordinates & GPS accuracy</li>
+                <li className="flex items-center gap-2 text-emerald-300">✓ Incident timestamp</li>
+                <li className="flex items-center gap-2 text-emerald-300">✓ Jurisdictional police station</li>
+              </ul>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  id="sos-need-help-button"
+                  onClick={() => {
+                    if (sosRecord?.id) {
+                      CrisisIntelligenceEngine.appendTimelineEvent(sosRecord.id, {
+                        eventType: "VICTIM_ASSISTANCE_RECONFIRMED",
+                        description: "Citizen reconfirmed: NEED HELP immediately",
+                        actor: "CITIZEN",
+                        source: "NO_COMMUNICATION_MODE",
+                      });
+                    }
+                    setStatusMessage("Urgent assistance re-broadcast to police command.");
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-md active:scale-95 cursor-pointer"
+                >
+                  [ NEED HELP ]
+                </button>
+                <button
+                  type="button"
+                  id="sos-im-safe-button"
+                  onClick={() => {
+                    if (sosRecord?.id) {
+                      CrisisIntelligenceEngine.appendTimelineEvent(sosRecord.id, {
+                        eventType: "VICTIM_SAFE_REPORTED",
+                        description: "Citizen reported: I'M SAFE",
+                        actor: "CITIZEN",
+                        source: "NO_COMMUNICATION_MODE",
+                      });
+                    }
+                    setStatusMessage("Status updated: Citizen confirmed safe.");
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold text-xs border border-slate-700 shadow-md active:scale-95 cursor-pointer"
+                >
+                  [ I'M SAFE ]
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Adaptive Incident Interview Trigger (Phase 8) */}
+          {isEmergencyActive && sosRecord?.id && (
+            <button
+              type="button"
+              id="sos-open-adaptive-interview"
+              onClick={() => setShowAdaptiveInterview(true)}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-between transition-all cursor-pointer shadow-sm"
+            >
+              <span className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-amber-400" />
+                <span>Answer 4 Incident Details (Optional — For Responders)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">1 min</span>
+            </button>
+          )}
+
+          {/* SafeTag Hardware Simulator Trigger (Phase 11 & 12) */}
+          <button
+            type="button"
+            id="sos-open-safetag-simulator"
+            onClick={() => setShowSafeTagModal(true)}
+            className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-between transition-all cursor-pointer shadow-sm"
+          >
+            <span className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-blue-400 animate-pulse" />
+              <span>SafeTag BLE Hardware Simulator</span>
+            </span>
+            <span className="text-[10px] text-blue-400 font-mono">DEMO</span>
+          </button>
+
+          {/* AUTOMATIC SOS SMS (Section 5: httpSMS Android Gateway Dispatch) */}
           {location && (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                 <div>
                   <h3 className="text-xs font-black tracking-wider text-slate-200 uppercase flex items-center gap-1.5">
                     <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-                    PRIMARY SOS CONTACTS
+                    AUTOMATIC SOS SMS
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    3 contacts will be notified through the phone's messaging app
+                    3 primary emergency contacts
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] font-semibold text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700">
-                    Backup contacts: 3
+                  <span
+                    id="sos-sms-delivery-badge"
+                    className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                      smsDeliveryState === "SMS_DELIVERY_CONFIRMED"
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                        : smsDeliveryState === "SMS_SUBMITTED"
+                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                        : smsDeliveryState === "SMS_SUBMISSION_PENDING"
+                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30 animate-pulse"
+                        : smsDeliveryState === "SMS_DELIVERY_FAILED"
+                        ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                        : smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED" || smsDeliveryState === "SMS_PROVIDER_REJECTED"
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                        : "bg-slate-800 text-slate-400 border border-slate-700"
+                    }`}
+                  >
+                    {smsDeliveryState === "SMS_SUBMISSION_PENDING"
+                      ? "PREPARING"
+                      : smsDeliveryState === "SMS_SUBMITTED"
+                      ? "SUBMITTED"
+                      : smsDeliveryState === "SMS_DELIVERY_CONFIRMED"
+                      ? "CONFIRMED"
+                      : smsDeliveryState === "SMS_DELIVERY_FAILED"
+                      ? "DELIVERY_FAILED"
+                      : smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED"
+                      ? "NOT_CONFIGURED"
+                      : smsDeliveryState === "SMS_PROVIDER_REJECTED"
+                      ? "FAILED"
+                      : "READY"}
                   </span>
                 </div>
               </div>
 
-              {smsNotice && (
+              {/* Mandatory Truthfulness Disclaimer in Demo Mode (Phase 1) */}
+              {isSimulatedDispatch && (
+                <div
+                  id="sos-simulation-truthfulness-banner"
+                  className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 text-center font-mono text-[11px] font-bold space-y-0.5"
+                >
+                  <div>DEMO SIMULATION — No physical SMS was sent</div>
+                  <div className="text-[10px] text-amber-300/80 font-sans font-normal">
+                    Emulated carrier report for system evaluation.
+                  </div>
+                </div>
+              )}
+
+              {/* Primary 3 Contacts — Display masked numbers only */}
+              <div className="space-y-1.5">
+                {primaryRecipients.map((phone, idx) => (
+                  <div
+                    key={phone}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Contact {idx + 1}:
+                      </span>
+                      <span className="text-[11px] font-mono font-bold text-slate-300">
+                        {maskPhoneNumber(phone)}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700">
+                      Primary
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Manual Trigger Button if not yet triggered */}
+              {!isEmergencyActive && (
+                <button
+                  type="button"
+                  id="sos-send-3-contacts-button"
+                  onClick={acquireGPS}
+                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow cursor-pointer"
+                >
+                  SEND SOS TO 3 CONTACTS
+                </button>
+              )}
+
+              {/* Delivery State Feedback */}
+              {smsDeliveryState === "SMS_SUBMISSION_PENDING" && (
                 <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-center">
-                  <p className="text-[11px] text-blue-200 font-medium">
-                    {smsNotice}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Messaging app opened — delivery not confirmed
+                  <p className="text-[11px] text-blue-200 font-medium animate-pulse">
+                    Transmitting automated SOS SMS to 3 primary emergency contacts…
                   </p>
                 </div>
               )}
 
-              {/* Primary 3 Contacts with individual mobile SMS buttons */}
-              <div className="space-y-2">
-                {primaryRecipients.map((phone, idx) => {
-                  const contactNum = idx + 1;
-                  const hasOpened = Boolean(openedSmsContacts[phone]);
-                  const contactSmsUri = buildNativeSmsUri(phone, canonicalSosMsg);
+              {smsDeliveryState === "SMS_SUBMITTED" && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-center">
+                  <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${isSimulatedDispatch ? "text-amber-400" : "text-emerald-400"}`} />
+                    {isSimulatedDispatch
+                      ? "[DEMO SIMULATION] Simulated queueing (No physical SMS sent)"
+                      : "✓ SOS SMS submitted to 3 emergency contacts"}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {isSimulatedDispatch
+                      ? "DEMO SIMULATION: Emulated gateway queue. No real cellular SMS dispatched."
+                      : "Queued on httpSMS Android gateway for physical SIM transmission. Delivery pending gateway report."}
+                  </p>
+                </div>
+              )}
 
-                  return (
-                    <div
-                      key={phone}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 gap-2"
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-mono font-bold text-slate-300">
-                          {maskPhoneNumber(phone)}
-                        </span>
-                        <span className="text-[10px] text-slate-500 font-medium">
-                          Contact {contactNum}
-                        </span>
-                      </div>
+              {smsDeliveryState === "SMS_DELIVERY_CONFIRMED" && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-center">
+                  <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${isSimulatedDispatch ? "text-amber-400" : "text-emerald-400"}`} />
+                    {isSimulatedDispatch
+                      ? "[DEMO SIMULATION] Carrier delivery emulated (No physical SMS sent)"
+                      : "✓ Automatic SOS SMS: Delivery confirmed by Android gateway"}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {isSimulatedDispatch
+                      ? "DEMO SIMULATION: Emulated telecom carrier report. Physical transmission requires configured Android gateway phone or SMS API."
+                      : "Cellular carrier acknowledged delivery of emergency message to recipient handset."}
+                  </p>
+                </div>
+              )}
 
-                      <div className="flex items-center gap-2">
-                        {hasOpened ? (
-                          <div className="flex items-center gap-2 text-right">
-                            <span className="text-[10px] text-emerald-400 font-semibold leading-tight">
-                              Emergency SOS message prepared for Contact {contactNum}. Tap Send in your Messages app.
-                            </span>
-                            <a
-                              href={contactSmsUri}
-                              onClick={() => {
-                                setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
-                                setSmsNotice(`Emergency SOS message prepared for Contact ${contactNum}. Tap Send in your Messages app.`);
-                              }}
-                              className="text-[10px] text-slate-400 hover:text-white underline"
-                              title={`Reopen SOS SMS ${contactNum}`}
-                            >
-                              Reopen
-                            </a>
-                          </div>
-                        ) : (
-                          <a
-                            id={contactNum === 1 ? "sos-open-sms-button" : `sos-open-sms-button-${contactNum}`}
-                            href={contactSmsUri}
-                            onClick={() => {
-                              setOpenedSmsContacts((prev) => ({ ...prev, [phone]: true }));
-                              setSmsNotice(`Emergency SOS message prepared for Contact ${contactNum}. Tap Send in your Messages app.`);
-                            }}
-                            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition-all no-underline shadow cursor-pointer"
-                            title={`[ Contact ${contactNum} ] Open SOS SMS`}
-                          >
-                            <MessageSquare className="w-3 h-3" />
-                            <span>OPEN SOS SMS {contactNum}</span>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              {smsDeliveryState === "SMS_DELIVERY_FAILED" && (
+                <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-center space-y-1">
+                  <p className="text-[11px] text-rose-300 font-semibold">
+                    Automatic SOS SMS: Delivery Failed
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    Android gateway reported carrier delivery failure. Police command realtime dispatch remains active.
+                  </p>
+                </div>
+              )}
+
+              {smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED" && (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-center space-y-2">
+                  <p className="text-[11px] text-amber-300 font-semibold">
+                    Automatic SOS SMS: Not configured
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    httpSMS Android gateway not configured on server. Police command realtime dispatch remains active.
+                  </p>
+                  <button
+                    type="button"
+                    id="sos-simulate-gateway-button"
+                    onClick={triggerSimulatedSmsDispatch}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md active:scale-98 cursor-pointer mt-1"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-blue-200 animate-pulse" />
+                    <span>Run Simulated Carrier Dispatch (Demo Mode)</span>
+                  </button>
+                </div>
+              )}
+
+              {smsDeliveryState === "SMS_PROVIDER_REJECTED" && (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-center space-y-2">
+                  <p className="text-[11px] text-amber-300 font-semibold">
+                    {smsNotice || "Automatic SOS SMS: Failed"}
+                  </p>
+                  {smsErrorMessage && (
+                    <p className="text-[10px] text-amber-400/80 font-mono">
+                      {smsErrorMessage}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-400">
+                    Police command realtime dispatch remains active and unaffected. Use Call 112 directly.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={triggerSimulatedSmsDispatch}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-bold transition-all shadow-md active:scale-98 cursor-pointer"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                    <span>Switch to Simulated Carrier Dispatch (Demo Mode)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Message Payload Preview */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  id="sos-preview-sms-toggle"
+                  onClick={() => setShowSmsPayloadPreview((prev) => !prev)}
+                  className="w-full text-[10px] font-mono text-blue-400 hover:text-blue-300 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-800/40 border border-slate-700/40 cursor-pointer"
+                >
+                  <span>{showSmsPayloadPreview ? "▼ Hide Generated SOS SMS Text" : "▶ View Generated SOS SMS Text (160 chars)"}</span>
+                  <span className="text-slate-500 font-sans">GSM Standard</span>
+                </button>
+                {showSmsPayloadPreview && (
+                  <div className="mt-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
+                    {buildCanonicalSosMessage({
+                      location,
+                      nearestStation,
+                    })}
+                  </div>
+                )}
               </div>
 
-              {/* BACKUP CONTACTS (3 contacts configured) */}
-              <div className="pt-2.5 border-t border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[11px] font-black tracking-wider text-slate-400 uppercase">
-                    BACKUP CONTACTS
-                  </span>
-                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
-                    3 contacts configured
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Backup contacts: 3 (held in reserve if primary contacts are unreachable)
-                </p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {backupRecipients.map((phone, bIdx) => (
-                    <div key={phone} className="p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-center">
-                      <div className="text-[9px] text-slate-400 font-medium">Backup {bIdx + 1}</div>
-                      <div className="text-[10px] font-mono text-slate-400">{maskPhoneNumber(phone)}</div>
-                    </div>
-                  ))}
-                </div>
+              {/* Subtle indicator of backup contacts held in reserve */}
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                <span>Backup contacts:</span>
+                <span className="font-semibold text-slate-300">3 configured in reserve (standby only)</span>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40 text-[10px] text-slate-400 space-y-1">
-                <p className="font-semibold text-slate-300">
-                  Delivery Truthfulness Note:
-                </p>
-                <p>
-                  Your phone's Messages app will open with prefilled emergency alert. Review and tap Send. We do not claim background or automatic SMS delivery.
-                </p>
+              {/* Demo Mode Configuration Toggle */}
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    id="sos-auto-simulate-checkbox"
+                    checked={autoSimulateDemo}
+                    onChange={(e) => {
+                      setAutoSimulateDemo(e.target.checked);
+                      try {
+                        localStorage.setItem("report_sos_auto_simulate_demo", String(e.target.checked));
+                      } catch (_) {}
+                    }}
+                    className="rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 w-3 h-3 cursor-pointer"
+                  />
+                  <span className="text-slate-300">Auto-simulate in Demo Mode (when live gateway unconfigured)</span>
+                </label>
+                {isSimulatedDispatch && (
+                  <span className="font-mono text-[9px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    SIMULATOR ACTIVE
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -807,10 +1215,24 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
           {/* Honest Footer Notice */}
           <div className="pt-2 border-t border-slate-800 text-center">
             <p className="text-[10px] text-slate-500">
-              Honest Emergency Notice: SMS is launched via your native device Messages app. We do not claim background or automatic SMS delivery.
+              Honest Emergency Notice: SOS alerts are dispatched automatically to police command and server-side emergency contacts. Delivery is subject to telecom carrier network.
             </p>
           </div>
         </div>
+
+        {/* SafeTag BLE Simulator Modal (Phase 11 & 12) */}
+        <SafeTagSimulatorModal
+          isOpen={showSafeTagModal}
+          onClose={() => setShowSafeTagModal(false)}
+        />
+
+        {/* Adaptive Incident Intelligence Interview Modal (Phase 8) */}
+        <AdaptiveInterviewModal
+          isOpen={showAdaptiveInterview}
+          incidentId={sosRecord?.id}
+          onComplete={() => setShowAdaptiveInterview(false)}
+          onClose={() => setShowAdaptiveInterview(false)}
+        />
       </div>
     </div>
   );

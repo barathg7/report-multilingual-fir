@@ -13,6 +13,7 @@ import {
   RefreshCw,
   CheckCircle,
 } from "lucide-react";
+import Card3D from "@/components/ui/Card3D";
 
 const OTP_LEN    = 6;
 const RESEND_SECS = 60;
@@ -661,62 +662,66 @@ export default function CitizenLogin() {
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-12"
-      style={{
-        background:
-          "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #312e81 100%)",
-      }}
-    >
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm mb-5 text-white backdrop-blur-sm">
-          <Shield className="h-4 w-4 text-blue-300" />
-          Tamil Nadu Police · REPORT System
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden civic-command-bg">
+      {/* Ambient background glow & hologram grid */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 hologram-grid opacity-40 pointer-events-none" />
+
+      {/* Header Emblem */}
+      <div className="text-center mb-8 relative z-10 space-y-3">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-700 via-indigo-900 to-slate-950 text-white shadow-3d-button-primary border border-cyan-400/40">
+          <Shield className="h-8 w-8 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
         </div>
-        <h1 className="text-4xl font-black text-white tracking-tight">
-          Citizen Portal
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+          Citizen Verification Terminal
         </h1>
-        <p className="text-blue-200 text-sm mt-1">
-          Verify your identity to file a complaint
+        <p className="text-slate-400 text-xs sm:text-sm font-medium">
+          Biometric Identity Verification for Official FIR Lodging · Tamil Nadu Police
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-        <div className="flex items-center justify-center gap-2 mb-5">
-          {[1, 2].map((s) => (
-            <div
-              key={s}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                s === step ? "w-8 bg-blue-600" : s < step ? "w-4 bg-green-500" : "w-4 bg-gray-200"
-              }`}
-            />
-          ))}
-        </div>
+      {/* 3D Glass Card */}
+      <div className="w-full max-w-md relative z-10">
+        <Card3D maxTilt={6} glowColor="rgba(56, 189, 248, 0.2)" className="rounded-3xl">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-3d-card-hover p-7 sm:p-8 border border-white/80">
+            {/* Step Indicator */}
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {[1, 2].map((s) => (
+                <div
+                  key={s}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    s === step ? "w-10 bg-blue-600 shadow-sm" : s < step ? "w-5 bg-emerald-500" : "w-5 bg-slate-200"
+                  }`}
+                />
+              ))}
+            </div>
 
-        <h2 className="text-lg font-bold text-gray-900 text-center mb-1">
-          {step === 1 ? "Your Details" : "Verify OTP"}
-        </h2>
+            <h2 className="text-lg font-black text-slate-900 text-center mb-2 tracking-tight">
+              {step === 1 ? "Identity Credentials" : "Two-Factor Passcode"}
+            </h2>
 
-        {step === 1 ? (
-          <DetailsStep
-            onNext={(data) => {
-              citizenRef.current = data;
-              setStep(2);
-            }}
-          />
-        ) : (
-          <OTPStep
-            citizen={citizenRef.current}
-            onVerified={() => navigate("/home")}
-            onBack={() => setStep(1)}
-          />
-        )}
+            {step === 1 ? (
+              <DetailsStep
+                onNext={(data) => {
+                  citizenRef.current = data;
+                  setStep(2);
+                }}
+              />
+            ) : (
+              <OTPStep
+                citizen={citizenRef.current}
+                onVerified={() => navigate("/home")}
+                onBack={() => setStep(1)}
+              />
+            )}
 
-        <div className="border-t border-gray-100 pt-3 mt-4">
-          <p className="text-xs text-gray-400 text-center">
-            Your information is secure · Used only for FIR verification
-          </p>
-        </div>
+            <div className="border-t border-slate-100 pt-4 mt-6">
+              <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                Protected by 256-bit encryption · Official verification under <strong>BNSS 2023</strong>
+              </p>
+            </div>
+          </div>
+        </Card3D>
       </div>
     </div>
   );

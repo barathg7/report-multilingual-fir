@@ -1,16 +1,20 @@
 import { useState } from "react";
-import { FileText, Search, Trash2, Eye, Plus } from "lucide-react";
+import { FileText, Search, Trash2, Eye, Plus, ShieldCheck, ChevronDown, ChevronUp, MapPin, Calendar, Scale } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useFIRStore } from "@/hooks/useFIRStore";
 import Badge from "@/components/ui/Badge";
-import Input from "@/components/ui/Input";
+import Card3D from "@/components/ui/Card3D";
 
-const STATUS_COLOR = { submitted: "green", draft: "gray", pending_review: "yellow" };
+const STATUS_COLOR = {
+  submitted: "green",
+  draft: "gray",
+  pending_review: "yellow",
+};
 
 export default function FIRHistory() {
   const { firs, deleteFIR } = useFIRStore();
-  const [search, setSearch]   = useState("");
-  const [filter, setFilter]   = useState("all");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState(null);
 
   const filtered = firs
@@ -30,101 +34,200 @@ export default function FIRHistory() {
     .sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="p-6 md:p-8 space-y-7 max-w-5xl mx-auto civic-mesh-bg min-h-full">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <FileText className="h-6 w-6 text-blue-600" /> FIR History
-          </h1>
-          <p className="text-gray-500 text-sm mt-0.5">{firs.length} total records</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-700 shadow-sm">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                FIR Case Registry
+              </h1>
+              <p className="text-slate-500 text-xs sm:text-sm">
+                Official Digital Archive · {firs.length} Total Incident Record(s)
+              </p>
+            </div>
+          </div>
         </div>
-        <Link to="/record-statement" className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700">
-          <Plus className="h-4 w-4" /> New FIR
+
+        <Link
+          to="/record-statement"
+          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 text-white px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold shadow-3d-button-primary hover:shadow-3d-glow-blue transition-all"
+        >
+          <Plus className="h-4 w-4" />
+          <span>Lodge New Statement</span>
         </Link>
       </div>
 
-      {/* Search & filter */}
-      <div className="flex gap-3">
+      {/* Search & Filter Dock */}
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, crime type, FIR ID or location..."
-            className="w-full h-10 border border-gray-300 rounded-xl pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by complainant, incident type, location, FIR number…"
+            className="w-full h-12 border border-slate-200/90 rounded-2xl pl-11 pr-4 text-sm bg-white/90 backdrop-blur-md shadow-3d-card focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition"
           />
         </div>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}
-          className="border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="all">All Status</option>
-          <option value="submitted">Submitted</option>
-          <option value="draft">Draft</option>
+
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="h-12 border border-slate-200/90 rounded-2xl px-4 text-sm font-semibold bg-white/90 backdrop-blur-md shadow-3d-card focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-700 cursor-pointer"
+        >
+          <option value="all">All Jurisdictional Statuses</option>
+          <option value="submitted">Submitted to Station</option>
+          <option value="draft">Draft / Incomplete</option>
         </select>
       </div>
 
-      {/* List */}
+      {/* Registry List */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl bg-white">
-          <FileText className="h-12 w-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">{search ? "No matching FIRs" : "No FIRs yet"}</p>
-          <p className="text-gray-400 text-sm mt-1">{search ? "Try a different search" : "File your first FIR to get started"}</p>
+        <div className="text-center py-16 px-4 border-2 border-dashed border-slate-200 rounded-3xl bg-white/60 backdrop-blur-sm space-y-3">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto shadow-inner">
+            <FileText className="h-8 w-8 text-blue-400" />
+          </div>
+          <p className="text-slate-800 font-extrabold text-base">
+            {search ? "No Matching Records Found" : "Registry Empty"}
+          </p>
+          <p className="text-slate-400 text-xs sm:text-sm max-w-sm mx-auto">
+            {search
+              ? "Try adjusting your search query or jurisdiction filter parameters."
+              : "No FIR statements have been recorded in this terminal session yet."}
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((fir) => (
-            <div key={fir.id} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-              {/* Row */}
-              <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="bg-blue-50 rounded-xl p-2.5 shrink-0">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-800 truncate">{fir.complainantName || "Unknown"}</p>
-                      <Badge color={STATUS_COLOR[fir.status] || "gray"}>{fir.status || "draft"}</Badge>
-                    </div>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {fir.crimeType || "Unknown crime"} · {fir.incidentLocation || "—"} · {fir.incidentDate || "—"}
-                    </p>
-                    <p className="text-xs font-mono text-blue-500 mt-0.5">
-                      {fir.officialFIRNo ? `FIR: ${fir.officialFIRNo}` : (fir.submissionId || fir.id)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 ml-4 shrink-0">
-                  <button onClick={() => setExpanded(expanded === fir.id ? null : fir.id)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => { if (confirm("Delete this FIR?")) deleteFIR(fir.id); }}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+        <div className="space-y-3.5">
+          {filtered.map((fir) => {
+            const isExp = expanded === fir.id;
+            return (
+              <Card3D
+                key={fir.id}
+                maxTilt={3}
+                glowColor="rgba(56, 189, 248, 0.12)"
+                className="rounded-2xl"
+              >
+                <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-3d-card hover:border-blue-300 transition-all overflow-hidden">
+                  {/* Primary Row */}
+                  <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0 text-blue-700 shadow-sm">
+                        <FileText className="h-5 w-5" />
+                      </div>
 
-              {/* Expanded details */}
-              {expanded === fir.id && (
-                <div className="border-t border-gray-100 px-4 py-4 bg-gray-50 space-y-2 text-sm">
-                  {[
-                    ["Language",        fir.language],
-                    ["Phone",           fir.complainantPhone],
-                    ["IPC Sections",    fir.ipcSections?.map((s) => `§${s}`).join(", ")],
-                    ["Description",     fir.incidentDescription],
-                    ["GPS Coordinates", fir.incidentLatitude ? `${fir.incidentLatitude.toFixed(5)}, ${fir.incidentLongitude.toFixed(5)}` : null],
-                    ["Photos",          fir.evidencePhotos?.length ? `${fir.evidencePhotos.length} photo(s)` : null],
-                    ["Sketch",          fir.suspectSketchUrl ? "AI Sketch Generated" : null],
-                    ["Saved At",        fir.savedAt ? new Date(fir.savedAt).toLocaleString("en-IN") : null],
-                  ].filter(([, v]) => v).map(([label, value]) => (
-                    <div key={label} className="flex gap-3">
-                      <span className="text-gray-500 w-36 shrink-0 font-medium">{label}</span>
-                      <span className="text-gray-800">{value}</span>
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <p className="font-extrabold text-slate-900 text-sm sm:text-base truncate">
+                            {fir.complainantName || "Anonymous Complainant"}
+                          </p>
+                          <Badge color={STATUS_COLOR[fir.status] || "gray"}>
+                            {fir.status || "draft"}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                          <span className="font-bold text-slate-700">{fir.crimeType || "Incident Grievance"}</span>
+                          <span>·</span>
+                          <span className="truncate">{fir.incidentLocation || "Location Pending"}</span>
+                          <span>·</span>
+                          <span>{fir.incidentDate || "Date Pending"}</span>
+                        </div>
+
+                        <p className="text-[11px] font-mono font-bold text-blue-600">
+                          {fir.officialFIRNo ? `CASE ID: ${fir.officialFIRNo}` : (fir.submissionId || fir.id)}
+                        </p>
+                      </div>
                     </div>
-                  ))}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setExpanded(isExp ? null : fir.id)}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          isExp
+                            ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                        }`}
+                        title={isExp ? "Collapse details" : "Inspect case dossier"}
+                      >
+                        {isExp ? <ChevronUp className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this FIR record from local storage?")) {
+                            deleteFIR(fir.id);
+                          }
+                        }}
+                        className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all cursor-pointer"
+                        title="Delete Record"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3D Dossier Details Expanded */}
+                  {isExp && (
+                    <div className="border-t border-slate-100 px-5 py-5 bg-gradient-to-b from-slate-50/70 to-blue-50/20 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {[
+                          ["Language / Dialect", fir.language || "English"],
+                          ["Complainant Phone", fir.complainantPhone ? `+91 ${fir.complainantPhone}` : "Not Provided"],
+                          [
+                            "BNS / IPC Sections",
+                            fir.ipcSections?.length
+                              ? fir.ipcSections.map((s) => `§${s}`).join(", ")
+                              : "No Sections Assigned",
+                          ],
+                          [
+                            "GPS Coordinates",
+                            fir.incidentLatitude
+                              ? `${fir.incidentLatitude.toFixed(5)}, ${fir.incidentLongitude.toFixed(5)}`
+                              : "Coordinates Pending",
+                          ],
+                          [
+                            "Photographic Evidence",
+                            fir.evidencePhotos?.length ? `${fir.evidencePhotos.length} Attached file(s)` : "None",
+                          ],
+                          [
+                            "Digital Signature",
+                            fir.signatureData ? "Verified Cryptographic Signature" : "Unsigned",
+                          ],
+                          [
+                            "Filing Timestamp",
+                            fir.savedAt ? new Date(fir.savedAt).toLocaleString("en-IN") : "Unknown",
+                          ],
+                        ].map(([label, val]) => (
+                          <div
+                            key={label}
+                            className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between"
+                          >
+                            <span className="font-bold text-slate-500">{label}</span>
+                            <span className="font-semibold text-slate-800 font-mono">{val}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {fir.incidentDescription && (
+                        <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 space-y-1">
+                          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                            Incident Narrative Transcript
+                          </p>
+                          <p className="text-xs text-slate-700 leading-relaxed font-sans">
+                            {fir.incidentDescription}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              </Card3D>
+            );
+          })}
         </div>
       )}
     </div>

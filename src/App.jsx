@@ -12,7 +12,7 @@ import PoliceLogin from "./pages/PoliceLogin";
 import PoliceDashboard from "./pages/PoliceDashboard";
 import EmergencySecurity from "./components/kavalan/EmergencySecurity";
 
-const CITIZEN_ROUTES = ["/", "/home", "/dashboard", "/record-statement", "/fir-history"];
+const CITIZEN_ROUTES = ["/", "/citizen-portal", "/home", "/dashboard", "/record-statement", "/fir-history"];
 
 function AppRoutes() {
   const [showEmergency, setShowEmergency] = useState(false);
@@ -53,7 +53,8 @@ function AppRoutes() {
     <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/citizen-login" element={<CitizenLogin />} />   {/* ← ADDED (new route) */}
+        <Route path="/citizen-portal" element={<RecordStatement />} />
+        <Route path="/citizen-login" element={<CitizenLogin />} />
         <Route path="/home" element={<Home />} />
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />

@@ -33,15 +33,24 @@ export default function LandingPage() {
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span>Official Digital Reporting System · Tamil Nadu Police</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             id="nav-track-complaint"
             onClick={() => navigate("/fir-history")}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 px-3 py-2 rounded-xl hover:bg-white/80 transition-all min-h-[40px]"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 px-3 py-2 rounded-xl hover:bg-white/80 transition-all min-h-[40px] cursor-pointer"
             title="Track status of previously submitted complaints"
           >
             <History className="w-3.5 h-3.5 text-blue-600" />
             <span>Track Complaint</span>
+          </button>
+          <button
+            id="nav-police-portal-header"
+            onClick={() => navigate("/police-login")}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-blue-700 px-3.5 py-2 rounded-xl bg-white/90 hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 transition-all min-h-[40px] shadow-xs cursor-pointer"
+            title="Authorized Station Police Command Terminal"
+          >
+            <Lock className="w-3.5 h-3.5 text-blue-600" />
+            <span>Police Portal</span>
           </button>
         </div>
       </header>

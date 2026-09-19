@@ -102,6 +102,18 @@ function AppRoutes() {
   );
 }
 
+// Production SPA HashRouter Bridge: If loaded with a pathname like /police-login, sync to /#/police-login
+if (typeof window !== "undefined" && window.location.pathname && window.location.pathname !== "/") {
+  const p = window.location.pathname;
+  if (!p.startsWith("/api/")) {
+    const s = window.location.search || "";
+    const h = window.location.hash || "";
+    if (!h || h === "#/") {
+      window.location.replace(`/#${p}${s}`);
+    }
+  }
+}
+
 export default function App() {
   return (
     <HashRouter>

@@ -471,6 +471,27 @@ export default function RecordStatement() {
           </p>
         </div>
 
+        {/* ── Direct Emergency SOS Banner inside Citizen Portal ── */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-rose-50 via-rose-100/60 to-red-50 border border-rose-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <AlertTriangle className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-black uppercase tracking-wider text-rose-900">In Immediate Danger or Threat?</p>
+              <p className="text-xs text-rose-700">Skip complaint filing and activate emergency police dispatch immediately</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("open-sos-panel"))}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-all shadow-sm cursor-pointer shrink-0 min-h-[44px]"
+          >
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span>TRIGGER SOS NOW</span>
+          </button>
+        </div>
+
         {/* Search */}
         <div className="relative max-w-lg mx-auto">
           <Globe2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" aria-hidden="true" />

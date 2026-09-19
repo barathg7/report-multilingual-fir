@@ -220,11 +220,13 @@ BEGIN
   -- Deep merge facts
   v_merged_facts := v_record.incident_facts || COALESCE(p_facts, '{}'::jsonb);
 
-  -- Automatic priority calculation: if weapon reported or suspects >= 3, escalate priority to CRITICAL
+  -- Automatic priority calculation: if weapon reported, active attack, or immediate physical threat, escalate priority to CRITICAL
+  -- Note: suspects count is contextual information and does NOT escalate to CRITICAL by itself.
   v_priority := v_record.priority;
   IF (v_merged_facts->>'weapon_visible') = 'true'
      OR (v_merged_facts->>'weapon_reported') = 'true'
-     OR (v_merged_facts->>'suspects_count') IN ('3+', 'many')
+     OR (v_merged_facts->>'active_attack') = 'true'
+     OR (v_merged_facts->>'hostage_situation') = 'true'
      OR (v_merged_facts->>'immediate_physical_threat') = 'true' THEN
     v_priority := 'CRITICAL';
   END IF;

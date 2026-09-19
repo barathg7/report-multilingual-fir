@@ -297,7 +297,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
           setSosRecord(record);
           if (!record._local_only && record._supabase_inserted !== false) {
             setSosState(SOS_STATES.POLICE_ALERTED);
-            setStatusMessage("SOS alert dispatched to the jurisdictional police dashboard");
+            setStatusMessage("Police alert received: Delivered to jurisdictional station dashboard");
 
             // Subscribe to live status updates on this record
             if (record.id) {
@@ -995,7 +995,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                       : smsDeliveryState === "SMS_DELIVERY_FAILED"
                       ? "DELIVERY_FAILED"
                       : smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED"
-                      ? "NOT_CONFIGURED"
+                      ? "SMS_PROVIDER_NOT_CONFIGURED"
                       : smsDeliveryState === "SMS_PROVIDER_REJECTED"
                       ? "FAILED"
                       : "READY"}
@@ -1009,7 +1009,7 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                   id="sos-simulation-truthfulness-banner"
                   className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 text-center font-mono text-[11px] font-bold space-y-0.5"
                 >
-                  <div>DEMO SIMULATION — No physical SMS was sent</div>
+                  <div>[DEMO SIMULATION] — No physical SMS was sent</div>
                   <div className="text-[10px] text-amber-300/80 font-sans font-normal">
                     Emulated carrier report for system evaluation.
                   </div>
@@ -1104,8 +1104,8 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
 
               {smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED" && (
                 <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-center space-y-2">
-                  <p className="text-[11px] text-amber-300 font-semibold">
-                    Automatic SOS SMS: Not configured
+                  <p className="text-[11px] text-amber-300 font-semibold font-mono">
+                    SMS_PROVIDER_NOT_CONFIGURED
                   </p>
                   <p className="text-[10px] text-slate-400">
                     httpSMS Android gateway not configured on server. Police command realtime dispatch remains active.
@@ -1212,10 +1212,10 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
             </button>
           )}
 
-          {/* Honest Footer Notice */}
+          {/* Honest Footer Notice & Universal Accessibility Statement */}
           <div className="pt-2 border-t border-slate-800 text-center">
-            <p className="text-[10px] text-slate-500">
-              Honest Emergency Notice: SOS alerts are dispatched automatically to police command and server-side emergency contacts. Delivery is subject to telecom carrier network.
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Multiple emergency interaction pathways designed to reduce accessibility barriers. SOS alerts are delivered to police command and server-side emergency contacts. Delivery is subject to telecom carrier network.
             </p>
           </div>
         </div>

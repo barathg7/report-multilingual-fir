@@ -93,9 +93,13 @@ runTest("TEST 2: computeDeterministicPriority calculates priority deterministica
   const p2 = computeDeterministicPriority(EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY, { weapon_visible: true });
   assert.equal(p2, INCIDENT_PRIORITY.CRITICAL);
 
-  // 3+ suspects must elevate to CRITICAL
+  // 3+ suspects count alone is contextual information and does NOT elevate to CRITICAL
   const p3 = computeDeterministicPriority(EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY, { suspects_count: "3+" });
-  assert.equal(p3, INCIDENT_PRIORITY.CRITICAL);
+  assert.equal(p3, INCIDENT_PRIORITY.HIGH);
+
+  // 3+ suspects WITH weapon reported DOES elevate to CRITICAL
+  const p3WithWeapon = computeDeterministicPriority(EMERGENCY_CATEGORIES.OTHER_CRITICAL_EMERGENCY, { suspects_count: "3+", weapon_reported: true });
+  assert.equal(p3WithWeapon, INCIDENT_PRIORITY.CRITICAL);
 
   // Default Medical Emergency is HIGH
   const p4 = computeDeterministicPriority(EMERGENCY_CATEGORIES.MEDICAL_EMERGENCY, {});

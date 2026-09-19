@@ -196,31 +196,37 @@ export default function QuickShieldWidget({ onTriggerEmergency, onOpenSafeTagSim
 
       {/* Architectural Separation Documentation Drawer */}
       {showArchDocs && (
-        <div className="mt-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] space-y-2 text-slate-300 animate-in fade-in">
+        <div id="quickshield-reality-check-drawer" className="mt-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] space-y-2 text-slate-300 animate-in fade-in">
           <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
-            QuickShield Technical Implementation Scope
+            QuickShield Technical Reality & Scope Check
           </h4>
 
           <div className="grid sm:grid-cols-3 gap-2.5 pt-1 text-[10px]">
-            <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-              <span className="font-bold text-emerald-400 block mb-1">A. WEB / PWA (CURRENT)</span>
-              <p className="text-slate-400 leading-relaxed">
-                One-touch button, keyboard hotkey, Web Speech API keyword listener, and PWA manifest shortcut when browser is open.
-              </p>
+            <div className="p-2.5 rounded-lg bg-slate-900 border border-emerald-900/40">
+              <span className="font-bold text-emerald-400 block mb-1">SUPPORTED NOW:</span>
+              <ul className="text-slate-300 space-y-1 list-disc list-inside">
+                <li>Emergency UI (one-touch dispatch)</li>
+                <li>Keyboard shortcut (<kbd className="font-mono bg-slate-800 px-1 py-0.2 rounded text-slate-200 text-[9px]">Ctrl+Shift+E</kbd>)</li>
+                <li>Deep-link activation (<code className="font-mono text-emerald-300">#quickshield</code>)</li>
+                <li>Supported browser voice input ("HELP")</li>
+                <li>SafeTag simulator (demo hardware)</li>
+              </ul>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-              <span className="font-bold text-amber-400 block mb-1">B. ANDROID COMPANION</span>
-              <p className="text-slate-400 leading-relaxed">
-                Required for locked-screen hardware buttons, BLE background scanning, and automatic ESP32 GATT bridge.
-              </p>
+            <div className="p-2.5 rounded-lg bg-slate-900 border border-rose-900/40">
+              <span className="font-bold text-rose-400 block mb-1">NOT SUPPORTED BY WEB/PWA:</span>
+              <ul className="text-slate-300 space-y-1 list-disc list-inside">
+                <li>Arbitrary Android power-button interception (blocked by OS security sandbox)</li>
+                <li>Arbitrary locked-screen hardware-button interception</li>
+              </ul>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-              <span className="font-bold text-sky-400 block mb-1">C. STANDALONE SAFETAG</span>
-              <p className="text-slate-400 leading-relaxed">
-                Future hardware device equipped with integrated LTE-M / NB-IoT modem + GNSS module operating independently without a smartphone.
-              </p>
+            <div className="p-2.5 rounded-lg bg-slate-900 border border-amber-900/40">
+              <span className="font-bold text-amber-400 block mb-1">REQUIRES NATIVE ANDROID COMPANION:</span>
+              <ul className="text-slate-300 space-y-1 list-disc list-inside">
+                <li>Locked-screen SafeTag BLE background service</li>
+                <li>Android hardware trigger integration</li>
+              </ul>
             </div>
           </div>
         </div>

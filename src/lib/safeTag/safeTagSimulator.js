@@ -16,6 +16,7 @@ import {
   SAFETAG_EVENT_TYPES,
   SAFETAG_TIMINGS,
   buildSafeTagPacket,
+  safeTagProtocolEngine,
 } from "./safeTagProtocol.js";
 import { CrisisIntelligenceEngine } from "../crisisIntelligence/CrisisIntelligenceEngine.js";
 import { EMERGENCY_CATEGORIES, PROVENANCE_SOURCES } from "../crisisIntelligence/emergencyTaxonomy.js";
@@ -62,9 +63,25 @@ export class SafeTagSimulator {
         eventType = SAFETAG_EVENT_TYPES.SOS_MEDICAL;
         emergencyCategory = EMERGENCY_CATEGORIES.MEDICAL_EMERGENCY;
         break;
-      case "CANCEL":
+      case "CANCEL": {
         eventType = SAFETAG_EVENT_TYPES.CANCEL;
-        return this._handleCancellation();
+        const cancelPacket = buildSafeTagPacket({
+          deviceId: this.deviceId,
+          eventType,
+          batteryLevel: this.batteryLevel,
+          sequenceNumber: this.sequenceNumber,
+        });
+        const proc = safeTagProtocolEngine.processPacket(cancelPacket);
+        if (!proc.accepted) {
+          return {
+            success: false,
+            error: proc.error || "Cancellation rejected",
+            status: proc.status,
+            packet: cancelPacket,
+          };
+        }
+        return this._handleCancellation(cancelPacket);
+      }
       case "LONG_PRESS":
       default:
         eventType = SAFETAG_EVENT_TYPES.SOS_GENERAL;
@@ -78,6 +95,17 @@ export class SafeTagSimulator {
       batteryLevel: this.batteryLevel,
       sequenceNumber: this.sequenceNumber,
     });
+
+    // Run packet through SafeTag Protocol Engine (replay protection, sequence validation, debounce)
+    const proc = safeTagProtocolEngine.processPacket(packet);
+    if (!proc.accepted) {
+      return {
+        success: false,
+        error: proc.error || "Packet rejected by SafeTag Protocol Engine",
+        status: proc.status,
+        packet,
+      };
+    }
 
     // Find nearest station
     let nearestStation = null;
@@ -93,7 +121,7 @@ export class SafeTagSimulator {
       location,
       nearestStation,
       emergencyType: emergencyCategory,
-      source: PROVENANCE_SOURCES.SAFETAG_BLE_SIMULATOR,
+      source: PROVENANCE_SOURCES.SAFETAG,
       initialFacts: {
         safetag_device_id: this.deviceId,
         safetag_event_type: eventType,
@@ -125,6 +153,7 @@ export class SafeTagSimulator {
       packet,
       incident,
       simulated: true,
+      status: "INGESTED",
     };
   }
 
@@ -153,8 +182,10 @@ export class SafeTagSimulator {
 
     this._notifyStateChange();
 
-    setTimeout(() => {
+    if (this.vibTimer) clearTimeout(this.vibTimer);
+    this.vibTimer = setTimeout(() => {
       this.isVibrating = false;
+      this.vibTimer = null;
       this._notifyStateChange();
     }, 1000);
   }
@@ -162,7 +193,7 @@ export class SafeTagSimulator {
   /**
    * Cancels active emergency within grace window.
    */
-  async _handleCancellation() {
+  async _handleCancellation(cancelPacket = null) {
     if (!this.activeIncident) {
       return { success: false, error: "No active incident to cancel" };
     }
@@ -171,13 +202,15 @@ export class SafeTagSimulator {
       eventType: "SAFETAG_CANCELLED",
       description: "Emergency trigger cancelled via SafeTag hardware input",
       actor: "CITIZEN",
-      source: PROVENANCE_SOURCES.SAFETAG_BLE_SIMULATOR,
+      source: PROVENANCE_SOURCES.SAFETAG,
+      metadata: cancelPacket ? { event_id: cancelPacket.event_id, sequence_number: cancelPacket.sequence_number } : {},
     });
 
+    const prevIncident = this.activeIncident;
     this.activeIncident = null;
     this._notifyStateChange();
 
-    return { success: true, cancelled: true };
+    return { success: true, cancelled: true, incident: prevIncident, packet: cancelPacket };
   }
 
   _notifyStateChange() {
@@ -193,6 +226,10 @@ export class SafeTagSimulator {
   }
 
   destroy() {
+    if (this.vibTimer) {
+      clearTimeout(this.vibTimer);
+      this.vibTimer = null;
+    }
     if (this.realtimeSub) {
       this.realtimeSub.unsubscribe();
       this.realtimeSub = null;

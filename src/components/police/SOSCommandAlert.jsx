@@ -107,7 +107,7 @@ export default function SOSCommandAlert({
           </span>
           <h2 className="text-xs font-black tracking-wider uppercase text-red-600 flex items-center gap-1.5">
             <ShieldAlert className="w-4 h-4" />
-            CRISIS INTELLIGENCE & CITIZEN SOS DISPATCH ({authorizedAlerts.length})
+            CRISIS INTELLIGENCE & CITIZEN SOS ALERTS ({authorizedAlerts.length})
           </h2>
         </div>
         <span className="text-[11px] font-mono font-bold text-slate-500">
@@ -154,7 +154,7 @@ export default function SOSCommandAlert({
                     }`}
                   >
                     <Radio className="w-3 h-3" />
-                    {isAck ? "CLAIMED / IN PROGRESS" : alert.status}
+                    {isAck ? "Police alert acknowledged" : "Police alert received"}
                   </span>
 
                   {alert.priority && (

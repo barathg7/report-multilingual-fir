@@ -42,14 +42,21 @@ export const INCIDENT_PRIORITY = Object.freeze({
 });
 
 export const PROVENANCE_SOURCES = Object.freeze({
-  WEB_QUICKSHIELD: "WEB_QUICKSHIELD",
-  SAFETAG_HARDWARE: "SAFETAG_HARDWARE",
-  SAFETAG_BLE_SIMULATOR: "SAFETAG_BLE_SIMULATOR",
-  UNIVERSAL_ACCESSIBLE: "UNIVERSAL_ACCESSIBLE",
-  NO_COMMUNICATION_MODE: "NO_COMMUNICATION_MODE",
-  ADAPTIVE_INTERVIEW: "ADAPTIVE_INTERVIEW",
-  SIGN_LANGUAGE_EXPERIMENTAL: "SIGN_LANGUAGE_EXPERIMENTAL",
-  POLICE_COMMAND: "POLICE_COMMAND",
+  USER: "USER",
+  VOICE: "VOICE",
+  GESTURE_EXPERIMENTAL: "GESTURE_EXPERIMENTAL",
+  SAFETAG: "SAFETAG",
+  SYSTEM: "SYSTEM",
+  POLICE: "POLICE",
+  // Channel / Legacy aliases mapped for full backward-compatibility
+  WEB_QUICKSHIELD: "USER",
+  SAFETAG_HARDWARE: "SAFETAG",
+  SAFETAG_BLE_SIMULATOR: "SAFETAG",
+  UNIVERSAL_ACCESSIBLE: "USER",
+  NO_COMMUNICATION_MODE: "USER",
+  ADAPTIVE_INTERVIEW: "USER",
+  SIGN_LANGUAGE_EXPERIMENTAL: "GESTURE_EXPERIMENTAL",
+  POLICE_COMMAND: "POLICE",
 });
 
 export const EMERGENCY_TAXONOMY_METADATA = Object.freeze({
@@ -223,6 +230,9 @@ export function buildProvenanceRecord({
 
 /**
  * Computes deterministic priority from explicit facts without AI speculation.
+ * Suspects count is contextual information and does NOT escalate to CRITICAL by itself.
+ * CRITICAL requires an explicit critical condition (weapons, active attack, hostage, kidnapping, or critical category).
+ *
  * @param {string} emergencyType
  * @param {Object} facts
  * @returns {string} One of INCIDENT_PRIORITY
@@ -230,20 +240,123 @@ export function buildProvenanceRecord({
 export function computeDeterministicPriority(emergencyType, facts = {}) {
   const meta = EMERGENCY_TAXONOMY_METADATA[emergencyType] || EMERGENCY_TAXONOMY_METADATA.OTHER_CRITICAL_EMERGENCY;
 
-  if (
+  const hasExplicitCriticalFact =
     facts.weapon_visible === true ||
     facts.weapon_reported === true ||
-    facts.suspects_count === "3+" ||
-    facts.suspects_count >= 3 ||
-    facts.immediate_physical_threat === true ||
+    facts.active_attack === true ||
+    facts.hostage_situation === true ||
+    facts.immediate_physical_threat === true;
+
+  const isExplicitCriticalCategory =
+    meta.defaultPriority === INCIDENT_PRIORITY.CRITICAL ||
     emergencyType === EMERGENCY_CATEGORIES.ARMED_THREAT ||
     emergencyType === EMERGENCY_CATEGORIES.BOMB_OR_EXPLOSIVE_THREAT ||
     emergencyType === EMERGENCY_CATEGORIES.HOSTAGE_OR_HOME_INVASION ||
     emergencyType === EMERGENCY_CATEGORIES.KIDNAPPING_OR_ABDUCTION ||
-    emergencyType === EMERGENCY_CATEGORIES.IMMEDIATE_PHYSICAL_THREAT
-  ) {
+    emergencyType === EMERGENCY_CATEGORIES.IMMEDIATE_PHYSICAL_THREAT;
+
+  if (hasExplicitCriticalFact || isExplicitCriticalCategory) {
     return INCIDENT_PRIORITY.CRITICAL;
   }
 
   return meta.defaultPriority || INCIDENT_PRIORITY.HIGH;
+}
+
+/**
+ * Constructs a strict provenance record for an individual fact.
+ * Enforces rule: AI or automated system inference can NEVER silently become confirmed user fact.
+ *
+ * @param {Object} params
+ * @returns {Object} Provenance metadata
+ */
+export function buildFactProvenance({
+  source = PROVENANCE_SOURCES.USER,
+  userConfirmed = null,
+  confidence = 1.0,
+  timestamp = null,
+  location = null,
+} = {}) {
+  const isSystemOrAi = source === PROVENANCE_SOURCES.SYSTEM || source === "AI" || source === "AI_INFERENCE";
+  const confirmed = userConfirmed !== null ? Boolean(userConfirmed) : !isSystemOrAi;
+
+  return {
+    source,
+    confidence: Math.max(0.0, Math.min(1.0, Number(confidence) || 1.0)),
+    timestamp: timestamp || new Date().toISOString(),
+    user_confirmed: isSystemOrAi && userConfirmed === null ? false : confirmed,
+    location_accuracy: location?.accuracy ? Math.round(Number(location.accuracy)) : null,
+  };
+}
+
+/**
+ * Safely parses people mentioned in a citizen statement into structured facts with strict provenance.
+ * Preserves strict distinction between neutral persons / family members and actual suspects.
+ * AI or rule engine must never convert neutral individuals or family members into suspects.
+ *
+ * @param {string} text
+ * @param {Object} [options]
+ * @returns {Object} Structured fact record with strict provenance
+ */
+export function parseIncidentPeople(text = "", options = {}) {
+  const clean = String(text || "").toLowerCase();
+  const source = options.source || PROVENANCE_SOURCES.USER;
+  const userConfirmed = options.userConfirmed !== false;
+  const confidence = options.confidence !== undefined ? options.confidence : 1.0;
+  const location = options.location || null;
+  const timestamp = new Date().toISOString();
+
+  // Match numbers (digits or English words)
+  const numMatch = clean.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+  const wordToNum = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  };
+  let count = 1;
+  if (numMatch) {
+    count = isNaN(numMatch[1]) ? wordToNum[numMatch[1]] || 1 : parseInt(numMatch[1], 10);
+  }
+
+  const isFamilyOrFriend = /\b(family|family members?|relatives?|father|mother|brother|sister|son|daughter|wife|husband|friends?|colleagues?|bystanders?|passersby|crowd|passengers?)\b/i.test(clean);
+  const isExplicitSuspect = /\b(suspects?|attackers?|assailants?|intruders?|thieves?|thief|robbers?|perpetrators?|culprits?|gang|invaders?|burglars?)\b/i.test(clean);
+
+  if (isFamilyOrFriend && !isExplicitSuspect) {
+    return {
+      people_type: "COMPANION_OR_BYSTANDER",
+      people_count: count,
+      suspects_count: 0,
+      description: text.trim(),
+      source,
+      confidence,
+      timestamp,
+      user_confirmed: userConfirmed,
+      location_accuracy: location?.accuracy ? Math.round(Number(location.accuracy)) : null,
+    };
+  }
+
+  if (isExplicitSuspect) {
+    return {
+      people_type: "SUSPECT",
+      people_count: count,
+      suspects_count: count,
+      description: text.trim(),
+      source,
+      confidence,
+      timestamp,
+      user_confirmed: userConfirmed,
+      location_accuracy: location?.accuracy ? Math.round(Number(location.accuracy)) : null,
+    };
+  }
+
+  // Neutral persons reported without explicit suspicion (e.g. "There are 3 people")
+  return {
+    people_type: "UNSPECIFIED_PERSONS",
+    people_count: count,
+    suspects_count: null, // NOT declared as suspects without confirmation!
+    description: text.trim(),
+    source,
+    confidence,
+    timestamp,
+    user_confirmed: userConfirmed,
+    location_accuracy: location?.accuracy ? Math.round(Number(location.accuracy)) : null,
+  };
 }

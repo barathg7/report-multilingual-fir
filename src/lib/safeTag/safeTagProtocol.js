@@ -154,3 +154,151 @@ export function buildDownlinkAckPayload({
   };
 }
 
+/**
+ * State machine & protocol processor for SafeTag BLE events.
+ * Enforces:
+ * 1. Monotonic sequence validation & replay protection
+ * 2. Idempotency on duplicate event_id
+ * 3. Software debounce filtering (<50ms)
+ * 4. Accidental trigger cancellation within grace window
+ * 5. Clear separation between DEMO SIMULATOR and physical hardware
+ */
+export class SafeTagProtocolEngine {
+  constructor() {
+    this.devices = new Map(); // device_id -> { lastSequence, lastTimestamp, lastEventId, activeTriggerTime }
+    this.seenEventIds = new Set();
+  }
+
+  /**
+   * Resets engine state (useful for tests).
+   */
+  reset() {
+    this.devices.clear();
+    this.seenEventIds.clear();
+  }
+
+  /**
+   * Ingests and validates an incoming SafeTag BLE packet.
+   *
+   * @param {Object} packet
+   * @returns {{ accepted: boolean, status: string, packet?: Object, error?: string, errors?: string[], duplicate?: boolean, isSimulated?: boolean }}
+   */
+  processPacket(packet) {
+    // 1. Packet schema validation
+    const validation = validateSafeTagPacket(packet);
+    if (!validation.valid) {
+      return {
+        accepted: false,
+        status: "MALFORMED_REJECTED",
+        errors: validation.errors,
+      };
+    }
+
+    const { device_id, event_id, sequence_number, event_type, timestamp } = packet;
+    const now = Date.now();
+    const packetTime = new Date(timestamp).getTime();
+
+    const isSimulated = device_id.startsWith("SIM-") || device_id.includes("DEMO");
+
+    // 2. Idempotency Check: Exact duplicate event_id
+    if (this.seenEventIds.has(event_id)) {
+      return {
+        accepted: false,
+        status: "IDEMPOTENT_DUPLICATE",
+        duplicate: true,
+        packet,
+        isSimulated,
+        error: `Duplicate event ${event_id} already ingested`,
+      };
+    }
+
+    // 3. Device state check
+    const deviceState = this.devices.get(device_id) || {
+      lastSequence: -1,
+      lastTimestamp: 0,
+      activeTriggerTime: null,
+      lastEventId: null,
+    };
+
+    // 4. Sequence Replay Protection
+    if (sequence_number <= deviceState.lastSequence) {
+      return {
+        accepted: false,
+        status: "REPLAY_REJECTED",
+        error: `Sequence replay detected: received seq ${sequence_number}, last valid was ${deviceState.lastSequence}`,
+      };
+    }
+
+    // 5. Debounce Check (filters rapid mechanical switch contact bounce <50ms on same switch)
+    if (
+      event_type !== SAFETAG_EVENT_TYPES.CANCEL &&
+      deviceState.lastEventType === event_type &&
+      deviceState.lastTimestamp &&
+      Math.abs(now - deviceState.lastTimestamp) < SAFETAG_TIMINGS.DEBOUNCE_MS
+    ) {
+      return {
+        accepted: false,
+        status: "DEBOUNCED",
+        error: `Debounce threshold (${SAFETAG_TIMINGS.DEBOUNCE_MS}ms) active for device ${device_id}`,
+      };
+    }
+
+    // 6. Accidental Trigger Cancellation
+    if (event_type === SAFETAG_EVENT_TYPES.CANCEL) {
+      if (!deviceState.activeTriggerTime) {
+        return {
+          accepted: false,
+          status: "CANCEL_REJECTED",
+          error: "No active emergency trigger to cancel for this device",
+        };
+      }
+
+      const elapsed = now - deviceState.activeTriggerTime;
+      if (elapsed > SAFETAG_TIMINGS.CANCELLATION_WINDOW_MS) {
+        return {
+          accepted: false,
+          status: "CANCEL_WINDOW_EXPIRED",
+          error: `Cancellation window of ${SAFETAG_TIMINGS.CANCELLATION_WINDOW_MS / 1000}s has expired`,
+        };
+      }
+
+      // Valid cancellation
+      deviceState.activeTriggerTime = null;
+      deviceState.lastSequence = sequence_number;
+      deviceState.lastTimestamp = now;
+      deviceState.lastEventId = event_id;
+      this.seenEventIds.add(event_id);
+      this.devices.set(device_id, deviceState);
+
+      return {
+        accepted: true,
+        status: "CANCELLED",
+        packet,
+        isSimulated,
+      };
+    }
+
+    // 7. Successful emergency or status event
+    deviceState.lastSequence = sequence_number;
+    deviceState.lastTimestamp = now;
+    deviceState.lastEventId = event_id;
+    deviceState.lastEventType = event_type;
+    if (event_type !== SAFETAG_EVENT_TYPES.STATUS) {
+      deviceState.activeTriggerTime = now;
+    }
+
+    this.seenEventIds.add(event_id);
+    this.devices.set(device_id, deviceState);
+
+    return {
+      accepted: true,
+      status: "INGESTED",
+      packet,
+      isSimulated,
+    };
+  }
+}
+
+export const safeTagProtocolEngine = new SafeTagProtocolEngine();
+
+

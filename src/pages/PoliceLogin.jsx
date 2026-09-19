@@ -110,9 +110,14 @@ export default function PoliceLogin() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-700 via-indigo-900 to-slate-950 text-white shadow-3d-button-primary border border-cyan-400/40 mb-1">
             <Shield className="h-8 w-8 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
           </div>
-          <h1 className="text-white text-2xl sm:text-3xl font-black tracking-tight">
-            Police Command Terminal
-          </h1>
+          <div className="space-y-1">
+            <span className="text-[11px] font-mono tracking-widest text-cyan-400 font-bold uppercase block">
+              REPORT
+            </span>
+            <h1 className="text-white text-2xl sm:text-3xl font-black tracking-tight">
+              POLICE COMMAND PORTAL
+            </h1>
+          </div>
           <div className="flex items-center justify-center gap-2 text-xs text-blue-200">
             <span className="inline-flex items-center gap-1.5 bg-blue-950/80 text-cyan-300 px-3 py-1 rounded-full border border-cyan-500/40 font-mono font-bold shadow-sm">
               <Radio className="h-3 w-3 text-emerald-400 animate-pulse" />

@@ -5,7 +5,6 @@ import {
   AlertOctagon,
   ArrowRight,
   Radio,
-  Lock,
   History,
   Sparkles,
 } from "lucide-react";
@@ -31,7 +30,7 @@ export default function LandingPage() {
       <header className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Official Digital Reporting System · Tamil Nadu Police</span>
+          <span>Digital Reporting &amp; Emergency System</span>
         </div>
         <div className="flex items-center gap-2.5">
           <button
@@ -42,15 +41,6 @@ export default function LandingPage() {
           >
             <History className="w-3.5 h-3.5 text-blue-600" />
             <span>Track Complaint</span>
-          </button>
-          <button
-            id="nav-police-portal-header"
-            onClick={() => navigate("/police-login")}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-blue-700 px-3.5 py-2 rounded-xl bg-white/90 hover:bg-blue-50 border border-slate-200/90 hover:border-blue-300 transition-all min-h-[40px] shadow-xs cursor-pointer"
-            title="Authorized Station Police Command Terminal"
-          >
-            <Lock className="w-3.5 h-3.5 text-blue-600" />
-            <span>Police Portal</span>
           </button>
         </div>
       </header>
@@ -121,7 +111,7 @@ export default function LandingPage() {
               bg-gradient-to-r from-rose-700 via-red-600 to-rose-800 hover:from-rose-800 hover:to-red-700
               text-white shadow-3d-button-danger hover:shadow-3d-glow-rose active:translate-y-0.5
               transition-all duration-200 cursor-pointer min-h-[76px] text-left border border-rose-400/40 relative overflow-hidden"
-            aria-label="Trigger Immediate Emergency SOS. Transmits live coordinates and audio to police dispatch"
+            aria-label="Trigger Immediate Emergency SOS. Transmits live coordinates and emergency alert"
           >
             {/* Subtle radar pulse effect */}
             <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
@@ -139,7 +129,7 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <p className="text-xs text-rose-100/90 font-medium">
-                  Immediate danger · Live GPS &amp; police dispatch
+                  Immediate danger · Live GPS &amp; police alert
                 </p>
               </div>
             </div>
@@ -158,23 +148,11 @@ export default function LandingPage() {
 
       </main>
 
-      {/* ── Discrete Footer: Police Access Only (Separate Flow) ── */}
-      <footer className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      {/* ── Footer: BNS Compliance ── */}
+      <footer className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 border-t border-slate-200/80 flex items-center justify-center text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <Shield className="w-3.5 h-3.5 text-blue-600" />
           <span>BNS 2023 Compliant · Jurisdictional Station Triangulation</span>
-        </div>
-
-        {/* Dedicated Police Entry Link */}
-        <div className="flex items-center gap-4">
-          <button
-            id="nav-police-portal"
-            onClick={() => navigate("/police-login")}
-            className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-lg hover:bg-slate-100 transition-colors"
-          >
-            <Lock className="w-3.5 h-3.5 text-slate-500" />
-            <span>Official Police Portal →</span>
-          </button>
         </div>
       </footer>
 

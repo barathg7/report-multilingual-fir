@@ -69,10 +69,10 @@ Priority is never computed via probabilistic LLM guessing. It is derived through
 
 $$\text{Priority} = \begin{cases} 
 \text{CRITICAL}, & \text{if } \text{weapon\_visible} = \text{true} \lor \text{weapon\_reported} = \text{true} \\
-\text{CRITICAL}, & \text{if } \text{suspects\_count} \in \{'3+', \ge 3\} \\
-\text{CRITICAL}, & \text{if } \text{immediate\_physical\_threat} = \text{true} \lor \text{safe\_shelter} = \text{false} \\
-\text{CRITICAL}, & \text{if } \text{category} \in \{\text{ARMED}, \text{HOSTAGE}, \text{BOMB}, \text{PHYSICAL\_THREAT}\} \\
-\text{Category Default}, & \text{otherwise}
+\text{CRITICAL}, & \text{if } \text{active\_attack} = \text{true} \lor \text{hostage\_situation} = \text{true} \\
+\text{CRITICAL}, & \text{if } \text{immediate\_physical\_threat} = \text{true} \\
+\text{CRITICAL}, & \text{if } \text{category} \in \{\text{ARMED}, \text{HOSTAGE}, \text{BOMB}, \text{PHYSICAL\_THREAT}, \text{ABDUCTION}\} \\
+\text{Category Default}, & \text{otherwise (suspects count is contextual intelligence and does not trigger CRITICAL alone)}
 \end{cases}$$
 
 ---
@@ -97,6 +97,7 @@ Every emergency event stores an immutable provenance stamp:
 
 | Component | Status | Description |
 |---|---|---|
+| **Database Migration (20260919000000)** | **APPLIED (PRODUCTION)** | Production Supabase database updated with all columns, tables, and Security Definer RPCs. |
 | **QuickShield Web Hotkey & Deep Link** | **IMPLEMENTED** | `Ctrl+Shift+E`, `#quickshield`, `?sos=quickshield` globally mounted. |
 | **QuickShield Web Speech Trigger** | **IMPLEMENTED** | Web Speech API listening for emergency keywords in active tabs. |
 | **Universal Emergency Mode UI** | **IMPLEMENTED** | 5 rapid category buttons with high-contrast accessible touch targets. |

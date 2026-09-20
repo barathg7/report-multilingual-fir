@@ -92,43 +92,13 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
   const [showAdaptiveInterview, setShowAdaptiveInterview] = useState(false);
   const [noCommunicationActive, setNoCommunicationActive] = useState(true);
 
-  // Demo Simulation Mode for testing & evaluation
-  const [isSimulatedDispatch, setIsSimulatedDispatch] = useState(false);
-  const [autoSimulateDemo, setAutoSimulateDemo] = useState(() => {
-    try {
-      return localStorage.getItem("report_sos_auto_simulate_demo") !== "false";
-    } catch (_) {
-      return true;
-    }
-  });
+  // Message preview toggle
   const [showSmsPayloadPreview, setShowSmsPayloadPreview] = useState(false);
-  const [simulatedMessageId, setSimulatedMessageId] = useState("");
 
   const audioCtxRef = useRef(null);
   const sirenIntervalRef = useRef(null);
   const realtimeSubRef = useRef(null);
   const isMountedRef = useRef(true);
-
-  // Simulated Carrier Gateway Dispatch for Demo / Hackathon Evaluation
-  const triggerSimulatedSmsDispatch = useCallback(() => {
-    setIsSimulatedDispatch(true);
-    setSmsDeliveryState("SMS_SUBMISSION_PENDING");
-    setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
-    const mockId = `sim_msg_${Date.now().toString(36)}`;
-    setSimulatedMessageId(mockId);
-
-    setTimeout(() => {
-      if (!isMountedRef.current) return;
-      setSmsDeliveryState("SMS_SUBMITTED");
-      setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
-
-      setTimeout(() => {
-        if (!isMountedRef.current) return;
-        setSmsDeliveryState("SMS_DELIVERY_CONFIRMED");
-        setSmsNotice("DEMO SIMULATION — No physical SMS was sent");
-      }, 2400);
-    }, 1200);
-  }, []);
 
   // Stop siren audio oscillator
   const stopSiren = useCallback(() => {
@@ -332,34 +302,22 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 smsRes?.error?.includes("not configured") ||
                 smsRes?.error?.includes("missing:")
               ) {
-                if (autoSimulateDemo) {
-                  triggerSimulatedSmsDispatch();
-                } else {
-                  setSmsDeliveryState("SMS_PROVIDER_NOT_CONFIGURED");
-                  setSmsNotice("Automatic SOS SMS: Not configured");
-                  setSmsErrorMessage(smsRes.error || "httpSMS gateway not configured on server");
-                }
-              } else {
-                if (autoSimulateDemo) {
-                  triggerSimulatedSmsDispatch();
-                } else {
-                  setSmsDeliveryState("SMS_PROVIDER_REJECTED");
-                  setSmsNotice("Automatic SOS SMS: Failed");
-                  const sanitized = smsRes?.error && !smsRes.error.includes("non-2xx")
-                    ? smsRes.error
-                    : "httpSMS gateway rejected submission";
-                  setSmsErrorMessage(sanitized);
-                }
-              }
-            }).catch((err) => {
-              if (!isMountedRef.current) return;
-              if (autoSimulateDemo) {
-                triggerSimulatedSmsDispatch();
+                setSmsDeliveryState("SMS_PROVIDER_NOT_CONFIGURED");
+                setSmsNotice("Automatic SOS SMS: Not configured");
+                setSmsErrorMessage(smsRes.error || "httpSMS gateway not configured on server");
               } else {
                 setSmsDeliveryState("SMS_PROVIDER_REJECTED");
                 setSmsNotice("Automatic SOS SMS: Failed");
-                setSmsErrorMessage("Network error connecting to SMS service");
+                const sanitized = smsRes?.error && !smsRes.error.includes("non-2xx")
+                  ? smsRes.error
+                  : "httpSMS gateway rejected submission";
+                setSmsErrorMessage(sanitized);
               }
+            }).catch((err) => {
+              if (!isMountedRef.current) return;
+              setSmsDeliveryState("SMS_PROVIDER_REJECTED");
+              setSmsNotice("Automatic SOS SMS: Failed");
+              setSmsErrorMessage("Network error connecting to SMS service");
             });
           } else {
             setSosState(SOS_STATES.NETWORK_FAILURE);
@@ -992,29 +950,14 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                       ? "SUBMITTED"
                       : smsDeliveryState === "SMS_DELIVERY_CONFIRMED"
                       ? "CONFIRMED"
-                      : smsDeliveryState === "SMS_DELIVERY_FAILED"
-                      ? "DELIVERY_FAILED"
-                      : smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED"
-                      ? "SMS_PROVIDER_NOT_CONFIGURED"
-                      : smsDeliveryState === "SMS_PROVIDER_REJECTED"
+                      : smsDeliveryState === "SMS_DELIVERY_FAILED" || smsDeliveryState === "SMS_PROVIDER_REJECTED"
                       ? "FAILED"
+                      : smsDeliveryState === "SMS_PROVIDER_NOT_CONFIGURED"
+                      ? "NOT CONFIGURED"
                       : "READY"}
                   </span>
                 </div>
               </div>
-
-              {/* Mandatory Truthfulness Disclaimer in Demo Mode (Phase 1) */}
-              {isSimulatedDispatch && (
-                <div
-                  id="sos-simulation-truthfulness-banner"
-                  className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 text-center font-mono text-[11px] font-bold space-y-0.5"
-                >
-                  <div>[DEMO SIMULATION] — No physical SMS was sent</div>
-                  <div className="text-[10px] text-amber-300/80 font-sans font-normal">
-                    Emulated carrier report for system evaluation.
-                  </div>
-                </div>
-              )}
 
               {/* Primary 3 Contacts — Display masked numbers only */}
               <div className="space-y-1.5">
@@ -1054,23 +997,20 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
               {smsDeliveryState === "SMS_SUBMISSION_PENDING" && (
                 <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-center">
                   <p className="text-[11px] text-blue-200 font-medium animate-pulse">
-                    Transmitting automated SOS SMS to 3 primary emergency contacts…
+                    Preparing automated SOS SMS for primary contacts…
                   </p>
                 </div>
               )}
 
+              {/* [DEMO SIMULATION] — No physical SMS was sent without configured Android gateway */}
               {smsDeliveryState === "SMS_SUBMITTED" && (
-                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-center">
-                  <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${isSimulatedDispatch ? "text-amber-400" : "text-emerald-400"}`} />
-                    {isSimulatedDispatch
-                      ? "[DEMO SIMULATION] Simulated queueing (No physical SMS sent)"
-                      : "✓ SOS SMS submitted to 3 emergency contacts"}
+                <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-center">
+                  <p className="text-[11px] text-blue-300 font-bold flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                    ✓ SOS SMS submitted to 3 emergency contacts
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {isSimulatedDispatch
-                      ? "DEMO SIMULATION: Emulated gateway queue. No real cellular SMS dispatched."
-                      : "Queued on httpSMS Android gateway for physical SIM transmission. Delivery pending gateway report."}
+                    Queued on httpSMS Android gateway for physical SIM transmission. Delivery pending gateway report.
                   </p>
                 </div>
               )}
@@ -1078,15 +1018,11 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
               {smsDeliveryState === "SMS_DELIVERY_CONFIRMED" && (
                 <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-center">
                   <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${isSimulatedDispatch ? "text-amber-400" : "text-emerald-400"}`} />
-                    {isSimulatedDispatch
-                      ? "[DEMO SIMULATION] Carrier delivery emulated (No physical SMS sent)"
-                      : "✓ Automatic SOS SMS: Delivery confirmed by Android gateway"}
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    ✓ Automatic SOS SMS: Delivery confirmed by Android gateway
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {isSimulatedDispatch
-                      ? "DEMO SIMULATION: Emulated telecom carrier report. Physical transmission requires configured Android gateway phone or SMS API."
-                      : "Cellular carrier acknowledged delivery of emergency message to recipient handset."}
+                    Cellular carrier acknowledged delivery of emergency message to recipient handset.
                   </p>
                 </div>
               )}
@@ -1108,17 +1044,8 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                     SMS_PROVIDER_NOT_CONFIGURED
                   </p>
                   <p className="text-[10px] text-slate-400">
-                    httpSMS Android gateway not configured on server. Police command realtime dispatch remains active.
+                    httpSMS Android gateway not configured on server. Police command realtime dispatch remains active. Use Call 112 directly.
                   </p>
-                  <button
-                    type="button"
-                    id="sos-simulate-gateway-button"
-                    onClick={triggerSimulatedSmsDispatch}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md active:scale-98 cursor-pointer mt-1"
-                  >
-                    <Radio className="w-3.5 h-3.5 text-blue-200 animate-pulse" />
-                    <span>Run Simulated Carrier Dispatch (Demo Mode)</span>
-                  </button>
                 </div>
               )}
 
@@ -1135,14 +1062,6 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                   <p className="text-[10px] text-slate-400">
                     Police command realtime dispatch remains active and unaffected. Use Call 112 directly.
                   </p>
-                  <button
-                    type="button"
-                    onClick={triggerSimulatedSmsDispatch}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-bold transition-all shadow-md active:scale-98 cursor-pointer"
-                  >
-                    <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    <span>Switch to Simulated Carrier Dispatch (Demo Mode)</span>
-                  </button>
                 </div>
               )}
 
@@ -1167,34 +1086,10 @@ export default function EmergencySecurity({ showPanel = false, onClosePanel }) {
                 )}
               </div>
 
-              {/* Subtle indicator of backup contacts held in reserve */}
+              {/* Indicator of backup contacts held in reserve */}
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
                 <span>Backup contacts:</span>
                 <span className="font-semibold text-slate-300">3 configured in reserve (standby only)</span>
-              </div>
-
-              {/* Demo Mode Configuration Toggle */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    id="sos-auto-simulate-checkbox"
-                    checked={autoSimulateDemo}
-                    onChange={(e) => {
-                      setAutoSimulateDemo(e.target.checked);
-                      try {
-                        localStorage.setItem("report_sos_auto_simulate_demo", String(e.target.checked));
-                      } catch (_) {}
-                    }}
-                    className="rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 w-3 h-3 cursor-pointer"
-                  />
-                  <span className="text-slate-300">Auto-simulate in Demo Mode (when live gateway unconfigured)</span>
-                </label>
-                {isSimulatedDispatch && (
-                  <span className="font-mono text-[9px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                    SIMULATOR ACTIVE
-                  </span>
-                )}
               </div>
             </div>
           )}

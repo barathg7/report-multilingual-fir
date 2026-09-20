@@ -36,9 +36,6 @@ serve(async (req) => {
           })
         : null;
 
-    // Retained for backward-compatibility checks
-    const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
-
     const body = await req.json().catch(() => ({}));
     const {
       sos_id,
@@ -169,7 +166,7 @@ serve(async (req) => {
       if (supabaseAdmin) {
         await supabaseAdmin.rpc("update_sos_sms_dispatch", {
           p_sos_id: alertId,
-          p_state: "SMS_PROVIDER_REJECTED",
+          p_state: "SMS_PROVIDER_NOT_CONFIGURED",
           p_provider_request_id: null,
           p_error_message: "httpSMS Android gateway configuration incomplete on server.",
         });

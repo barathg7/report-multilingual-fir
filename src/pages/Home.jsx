@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import Card3D from "@/components/ui/Card3D";
 import ThreeShieldHologram from "@/components/ui/ThreeShieldHologram";
-import QuickShieldWidget from "@/components/kavalan/QuickShieldWidget";
 
 const features = [
   {
@@ -146,7 +145,7 @@ export default function Home() {
             <p className="text-slate-600 text-base sm:text-lg max-w-2xl leading-relaxed">
               Empowering victims and citizens to record accurate, legally sound police complaints in any
               language. Powered by real-time speech intelligence, automatic BNS 2023 classification, and
-              direct station dispatch.
+              direct jurisdictional station routing.
             </p>
 
             {/* Action Buttons */}
@@ -184,14 +183,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── REPORT QUICKSHIELD CONSOLE ── */}
-        <div className="w-full mb-10">
-          <QuickShieldWidget
-            onTriggerEmergency={() => {
-              window.dispatchEvent(new CustomEvent("open-sos-panel"));
-            }}
-          />
-        </div>
 
         {/* 3D Stats Ribbon */}
         <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-4 mb-14">

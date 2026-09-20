@@ -79,16 +79,13 @@ Create a `.env` file in the project root and add the same keys in **Vercel → P
 | `VITE_MAPTILER_KEY` | ✅ Yes | Satellite / hybrid / street crime-scene map |
 | `HTTPSMS_API_KEY` | ✅ Yes (Edge Function secret) | httpSMS API key for Android gateway SMS dispatch |
 | `HTTPSMS_FROM_NUMBER` | ✅ Yes (Edge Function secret) | Sender phone number matching physical SIM in Android phone (+91...) |
-| `HTTPSMS_WEBHOOK_SIGNING_KEY` | Optional (Edge Function secret) | Webhook signing key for verifying delivery callbacks |
-| `TWILIO_ACCOUNT_SID` | Optional | Emergency SOS SMS fallback (international numbers) |
-| `TWILIO_AUTH_TOKEN` | Optional | Twilio authentication |
-| `TWILIO_PHONE_NUMBER` | Optional | Twilio sender number |
+| `HTTPSMS_WEBHOOK_SIGNING_KEY` | ✅ Yes (Edge Function secret) | Webhook signing key for verifying delivery callbacks |
 | `VITE_CF_AI_TOKEN` + `VITE_CF_ACCOUNT_ID` | Optional | Suspect sketch — primary provider (Cloudflare Workers AI) |
 | `VITE_NGC_API_KEY` | Optional | Suspect sketch — backup provider (NVIDIA NIM SDXL) |
 | `VITE_NGC_FLUX_API_KEY` | Optional | Suspect sketch — backup provider (NVIDIA NIM Flux) |
 
 > **Sketch** always works with zero keys — falls through to free **Pollinations AI** then **Hugging Face** automatically.
-> **httpSMS Android Gateway** is the automated SMS provider for emergency contacts. See setup guide in [`docs/HTTPSMS_GATEWAY_SETUP.md`](docs/HTTPSMS_GATEWAY_SETUP.md).
+> **httpSMS Android Gateway** is the production automated SMS provider for emergency contacts. See setup guide in [`docs/HTTPSMS_GATEWAY_SETUP.md`](docs/HTTPSMS_GATEWAY_SETUP.md).
 
 ---
 
@@ -224,7 +221,7 @@ api/requirements.txt  →  python-docx==1.1.2
 REPORT_FRESH/
 ├── api/
 │   ├── generate-fir.py        ← Vercel serverless: fills matching state .docx
-│   └── send-sos.js            ← Legacy fallback endpoint
+│   └── send-otp.js            ← Citizen email OTP verification
 ├── public/
 │   └── fir_templates/         ← 28 official state/UT FIR .docx templates
 ├── screenshots/               ← App screenshots (add yours here)

@@ -207,27 +207,47 @@ export async function sendAutomaticSosSms(params: SendAutomaticSosParams): Promi
     };
 
     try {
-      const res = await fetch(sendEndpoint, {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      let res: Response;
+      try {
+        res = await fetch(sendEndpoint, {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data = await res.json().catch(() => ({}));
 
       // httpSMS returns 202 Accepted (or 200 OK) when queued for Android gateway
       if (res.status === 202 || res.status === 200 || data?.status === "success") {
-        const msgId = data?.data?.id || data?.id || `msg_${sosId}_${idx}`;
-        collectedMessageIds.push(msgId);
+        const msgId = data?.data?.id || data?.id;
+        if (msgId && typeof msgId === "string" && msgId.trim()) {
+          collectedMessageIds.push(msgId.trim());
+        } else {
+          errors.push(`Recipient ${maskPhoneNumber(recipient)}: Provider accepted but returned no message identifier (missing data.id)`);
+        }
+      } else if (res.status >= 400 && res.status < 500) {
+        const errMsg = data?.message || `HTTP ${res.status}`;
+        errors.push(`Recipient ${maskPhoneNumber(recipient)} rejected (HTTP ${res.status}): ${errMsg}`);
       } else {
         const errMsg = data?.message || `HTTP ${res.status}`;
-        errors.push(`Recipient ${maskPhoneNumber(recipient)}: ${errMsg}`);
+        errors.push(`Recipient ${maskPhoneNumber(recipient)} provider failure (HTTP ${res.status}): ${errMsg}`);
       }
     } catch (fetchErr: any) {
-      errors.push(`Recipient ${maskPhoneNumber(recipient)} network error: ${fetchErr?.message || "Unknown error"}`);
+      if (fetchErr?.name === "AbortError") {
+        errors.push(`Recipient ${maskPhoneNumber(recipient)} network timeout connecting to provider`);
+      } else {
+        errors.push(`Recipient ${maskPhoneNumber(recipient)} network error: ${fetchErr?.message || "Unknown error"}`);
+      }
     }
   }
 

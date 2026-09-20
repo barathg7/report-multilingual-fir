@@ -364,7 +364,7 @@ runTest("TEST 14: Twilio credentials exist only server-side and are NEVER in cli
   const edgeFunctionPath = path.join(projectRoot, "supabase", "functions", "send-sos-sms", "index.ts");
   assert.equal(fs.existsSync(edgeFunctionPath), true, "send-sos-sms edge function must exist");
   const edgeContent = fs.readFileSync(edgeFunctionPath, "utf-8");
-  assert.match(edgeContent, /Deno\.env\.get\("TWILIO_AUTH_TOKEN"\)/);
+  assert.match(edgeContent, /sendAutomaticSosSms/);
   assert.match(edgeContent, /AUTHORIZED_SOS_RECIPIENTS/);
 });
 

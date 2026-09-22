@@ -81,6 +81,14 @@ BEGIN
     RETURN jsonb_build_object('success', FALSE, 'error', 'Invalid dispatch state: ' || COALESCE(p_state, 'NULL'));
   END IF;
 
+  -- Authorization defense-in-depth: Only service_role (carrier webhook) can update delivery status
+  IF auth.role() <> 'service_role' THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Unauthorized: Only service_role can update delivery status'
+    );
+  END IF;
+
   -- Match strictly by provider_request_id (exact or comma-separated list match) with row-level lock
   SELECT * INTO v_record
   FROM sos_sms_dispatches
@@ -133,9 +141,10 @@ BEGIN
 END;
 $$;
 
--- Grant execution only to authenticated roles / service role
+-- Grant execution only to service role for webhook processing
 REVOKE ALL ON FUNCTION update_sos_sms_delivery_status(TEXT, TEXT, TEXT, TEXT) FROM anon, public;
-GRANT EXECUTE ON FUNCTION update_sos_sms_delivery_status(TEXT, TEXT, TEXT, TEXT) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION update_sos_sms_delivery_status(TEXT, TEXT, TEXT, TEXT) FROM authenticated;
+GRANT EXECUTE ON FUNCTION update_sos_sms_delivery_status(TEXT, TEXT, TEXT, TEXT) TO service_role;
 
 -- 3. HARDENED UPDATE DISPATCH OUTCOME RPC FUNCTION
 CREATE OR REPLACE FUNCTION update_sos_sms_dispatch(
@@ -151,7 +160,66 @@ SET search_path = public
 AS $$
 DECLARE
   v_record RECORD;
+  v_sos RECORD;
 BEGIN
+  IF p_sos_id IS NULL OR TRIM(p_sos_id) = '' THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'sos_id is required for updating SMS dispatch');
+  END IF;
+
+  -- Validate that p_state is a valid schema dispatch state
+  IF p_state NOT IN (
+    'SMS_SUBMISSION_PENDING',
+    'SMS_SUBMITTED',
+    'SMS_PROVIDER_REJECTED',
+    'SMS_PROVIDER_NOT_CONFIGURED',
+    'SMS_DELIVERY_CONFIRMED',
+    'SMS_DELIVERY_FAILED'
+  ) THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'Invalid dispatch state: ' || COALESCE(p_state, 'NULL'));
+  END IF;
+
+  -- 1. Provenance & Authorization Defense-in-Depth:
+  -- Only the trusted server-side SMS dispatch path (service_role) is authorized to assert dispatch outcomes.
+  -- Ordinary authenticated users (citizens) and station officers CANNOT directly invoke this RPC to forge SMS_SUBMITTED,
+  -- inject fake provider_request_ids, or tamper with dispatch records.
+  IF auth.role() <> 'service_role' THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Unauthorized: Only trusted server dispatch (service_role) can assert SMS dispatch status'
+    );
+  END IF;
+
+  -- 2. Verify existence in sos_records
+  IF NOT EXISTS (
+    SELECT 1 FROM sos_records WHERE id::text = p_sos_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Unauthorized update: No matching SOS record found in sos_records'
+    );
+  END IF;
+
+  -- 3. Retrieve existing dispatch record with row lock to enforce state machine transition invariants
+  SELECT * INTO v_record
+  FROM sos_sms_dispatches
+  WHERE sos_id = p_sos_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'Dispatch record not found');
+  END IF;
+
+  -- State Transition Rule: Cannot downgrade a confirmed delivery
+  IF v_record.state = 'SMS_DELIVERY_CONFIRMED' AND p_state <> 'SMS_DELIVERY_CONFIRMED' THEN
+    RETURN jsonb_build_object(
+      'success', TRUE,
+      'idempotent', TRUE,
+      'state', v_record.state,
+      'message', 'Dispatch is already confirmed delivered; state preserved'
+    );
+  END IF;
+
+  -- 4. Update the dispatch record atomically
   UPDATE sos_sms_dispatches
   SET state = p_state,
       provider_request_id = COALESCE(p_provider_request_id, provider_request_id),
@@ -161,10 +229,6 @@ BEGIN
       updated_at = NOW()
   WHERE sos_id = p_sos_id
   RETURNING * INTO v_record;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', FALSE, 'error', 'Dispatch record not found');
-  END IF;
 
   RETURN jsonb_build_object(
     'success', TRUE,
@@ -177,7 +241,8 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) FROM anon, public;
-GRANT EXECUTE ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) FROM authenticated;
+GRANT EXECUTE ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) TO service_role;
 
 -- 4. HARDENED ATOMIC CLAIM RPC FUNCTION WITH RETRY SUPPORT
 CREATE OR REPLACE FUNCTION claim_sos_sms_dispatch(
@@ -194,11 +259,63 @@ SET search_path = public
 AS $$
 DECLARE
   v_record RECORD;
+  v_sos RECORD;
 BEGIN
   IF p_sos_id IS NULL OR TRIM(p_sos_id) = '' THEN
     RETURN jsonb_build_object(
       'claimed', FALSE,
       'error', 'sos_id is required for claiming SMS dispatch'
+    );
+  END IF;
+
+  -- Verify that the SOS record actually exists in sos_records
+  IF NOT EXISTS (
+    SELECT 1 FROM sos_records WHERE id::text = p_sos_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'claimed', FALSE,
+      'error', 'Unauthorized dispatch: No matching SOS record found in sos_records'
+    );
+  END IF;
+
+  -- Load SOS record to verify ownership and active status
+  SELECT id, user_id, nearest_station_code, status
+    INTO v_sos
+    FROM sos_records
+   WHERE id::text = p_sos_id;
+
+  -- Authorization defense-in-depth:
+  -- Since this function is SECURITY DEFINER, strictly prevent anonymous callers and cross-user claims:
+  -- 1. Anonymous callers (auth.role() = 'anon' or auth.uid() IS NULL when not service_role) are strictly rejected.
+  IF auth.role() = 'anon' OR (auth.uid() IS NULL AND auth.role() <> 'service_role') THEN
+    RETURN jsonb_build_object(
+      'claimed', FALSE,
+      'error', 'Unauthorized: Valid authentication is required to claim SOS SMS dispatch'
+    );
+  END IF;
+
+  -- 2. Authenticated citizens must own the SOS record (or be an assigned active station officer or service_role).
+  IF auth.role() <> 'service_role' THEN
+    IF v_sos.user_id IS DISTINCT FROM auth.uid() THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM police_officers po
+        WHERE po.auth_uid = auth.uid()
+          AND po.station_code = v_sos.nearest_station_code
+          AND po.is_active = TRUE
+      ) THEN
+        RETURN jsonb_build_object(
+          'claimed', FALSE,
+          'error', 'Unauthorized dispatch: Caller does not own this SOS record'
+        );
+      END IF;
+    END IF;
+  END IF;
+
+  -- Only active alerts can be claimed for SMS dispatch
+  IF v_sos.status <> 'active' THEN
+    RETURN jsonb_build_object(
+      'claimed', FALSE,
+      'error', 'Invalid SOS status: Alert is ' || v_sos.status || '. Only active alerts can trigger SMS dispatch'
     );
   END IF;
 
@@ -222,7 +339,7 @@ BEGIN
       updated_at
     ) VALUES (
       p_sos_id,
-      COALESCE(p_station_code, 'ONLINE'),
+      COALESCE(p_station_code, v_sos.nearest_station_code, 'ONLINE'),
       COALESCE(p_recipient_count, 3),
       COALESCE(p_masked_recipients, '[]'::jsonb),
       'SMS_SUBMISSION_PENDING',
@@ -310,4 +427,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION claim_sos_sms_dispatch(TEXT, TEXT, INTEGER, JSONB, INTEGER) FROM anon, public;
-GRANT EXECUTE ON FUNCTION claim_sos_sms_dispatch(TEXT, TEXT, INTEGER, JSONB, INTEGER) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION claim_sos_sms_dispatch(TEXT, TEXT, INTEGER, JSONB, INTEGER) TO authenticated, service_role;

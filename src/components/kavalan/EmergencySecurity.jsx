@@ -22,6 +22,7 @@ import {
   Flame,
   ShieldAlert,
   Home,
+  Zap,
 } from "lucide-react";
 import { getNearestPoliceStations } from "../../lib/findNearestStation";
 import {

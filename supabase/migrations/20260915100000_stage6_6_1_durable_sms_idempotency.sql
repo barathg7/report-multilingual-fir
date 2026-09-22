@@ -196,7 +196,66 @@ SET search_path = public
 AS $$
 DECLARE
   v_record RECORD;
+  v_sos RECORD;
 BEGIN
+  IF p_sos_id IS NULL OR TRIM(p_sos_id) = '' THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'sos_id is required for updating SMS dispatch');
+  END IF;
+
+  -- Validate that p_state is a valid schema dispatch state
+  IF p_state NOT IN (
+    'SMS_SUBMISSION_PENDING',
+    'SMS_SUBMITTED',
+    'SMS_PROVIDER_REJECTED',
+    'SMS_PROVIDER_NOT_CONFIGURED',
+    'SMS_DELIVERY_CONFIRMED',
+    'SMS_DELIVERY_FAILED'
+  ) THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'Invalid dispatch state: ' || COALESCE(p_state, 'NULL'));
+  END IF;
+
+  -- 1. Provenance & Authorization Defense-in-Depth:
+  -- Only the trusted server-side SMS dispatch path (service_role) is authorized to assert dispatch outcomes.
+  -- Ordinary authenticated users (citizens) and station officers CANNOT directly invoke this RPC to forge SMS_SUBMITTED,
+  -- inject fake provider_request_ids, or tamper with dispatch records.
+  IF auth.role() <> 'service_role' THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Unauthorized: Only trusted server dispatch (service_role) can assert SMS dispatch status'
+    );
+  END IF;
+
+  -- 2. Verify existence in sos_records
+  IF NOT EXISTS (
+    SELECT 1 FROM sos_records WHERE id::text = p_sos_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Unauthorized update: No matching SOS record found in sos_records'
+    );
+  END IF;
+
+  -- 3. Retrieve existing dispatch record with row lock to enforce state machine transition invariants
+  SELECT * INTO v_record
+  FROM sos_sms_dispatches
+  WHERE sos_id = p_sos_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'Dispatch record not found');
+  END IF;
+
+  -- State Transition Rule: Cannot downgrade a confirmed delivery
+  IF v_record.state = 'SMS_DELIVERY_CONFIRMED' AND p_state <> 'SMS_DELIVERY_CONFIRMED' THEN
+    RETURN jsonb_build_object(
+      'success', TRUE,
+      'idempotent', TRUE,
+      'state', v_record.state,
+      'message', 'Dispatch is already confirmed delivered; state preserved'
+    );
+  END IF;
+
+  -- 4. Update the dispatch record atomically
   UPDATE sos_sms_dispatches
   SET state = p_state,
       provider_request_id = COALESCE(p_provider_request_id, provider_request_id),
@@ -204,10 +263,6 @@ BEGIN
       updated_at = NOW()
   WHERE sos_id = p_sos_id
   RETURNING * INTO v_record;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', FALSE, 'error', 'Dispatch record not found');
-  END IF;
 
   RETURN jsonb_build_object(
     'success', TRUE,
@@ -217,3 +272,10 @@ BEGIN
   );
 END;
 $$;
+
+REVOKE ALL ON FUNCTION claim_sos_sms_dispatch(TEXT, TEXT, INTEGER, JSONB, INTEGER) FROM anon, public;
+GRANT EXECUTE ON FUNCTION claim_sos_sms_dispatch(TEXT, TEXT, INTEGER, JSONB, INTEGER) TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) FROM anon, public;
+REVOKE ALL ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) FROM authenticated;
+GRANT EXECUTE ON FUNCTION update_sos_sms_dispatch(TEXT, TEXT, TEXT, TEXT) TO service_role;

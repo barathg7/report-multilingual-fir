@@ -191,6 +191,7 @@ export async function getCitizenFIR(firId, accessToken) {
 
 // ── SOS Operations (Stage 6.3) ──────────────────────────────────────────────
 export {
+  generateSecureUuid,
   createSOSRecord,
   getStationSOSAlerts,
   acknowledgeSOS,

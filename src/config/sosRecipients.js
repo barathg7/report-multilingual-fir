@@ -110,6 +110,15 @@ export function getStationCategorizedRecipients(stationCode) {
 }
 
 /**
+ * Returns the 3 primary contacts for automated SOS SMS dispatch.
+ * @param {string} stationCode
+ * @returns {ReadonlyArray<string>}
+ */
+export function getStationPrimaryRecipients(stationCode) {
+  return getStationCategorizedRecipients(stationCode).primary;
+}
+
+/**
  * Constructs the canonical automatic SOS alert message specified in Stage 6.5:
  *
  * 🚨 EMERGENCY SOS

@@ -284,6 +284,33 @@ export function buildSOSInsertPayload({
 }
 
 /**
+ * Generates a cryptographically secure RFC 4122 v4 UUID.
+ * Uses crypto.randomUUID() when available, falling back to crypto.getRandomValues().
+ * Strictly never uses Math.random().
+ *
+ * @returns {string} RFC 4122 v4 UUID
+ */
+export function generateSecureUuid() {
+  if (typeof crypto !== "undefined") {
+    if (typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto.getRandomValues === "function") {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      // Set version to 0100 (v4)
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      // Set variant to 10xx (RFC 4122)
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    }
+  }
+  throw new Error("Cryptographically secure random source (Web Crypto API) unavailable.");
+}
+
+/**
  * Creates an SOS record in Supabase `sos_records` with local storage fallback.
  * Returns record with truthful flags:
  * - `_supabase_inserted: true` and `_local_only: false` if database write succeeded
@@ -294,16 +321,27 @@ export function buildSOSInsertPayload({
  */
 export async function createSOSRecord(params) {
   const payload = buildSOSInsertPayload(params);
-  const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : undefined;
-  if (id) payload.id = id;
+  if (!payload.id) {
+    try {
+      payload.id = generateSecureUuid();
+    } catch (_) {
+      // Fall back to database gen_random_uuid() if crypto is completely unavailable
+    }
+  }
 
   // 1. Attempt Supabase insertion
   try {
     let isAuthed = false;
+    let authUid = null;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      isAuthed = Boolean(sessionData?.session?.user);
+      authUid = sessionData?.session?.user?.id || null;
+      isAuthed = Boolean(authUid);
     } catch (_) {}
+
+    if (isAuthed && authUid && !payload.user_id) {
+      payload.user_id = authUid;
+    }
 
     if (isAuthed) {
       const { data, error } = await supabase
@@ -329,9 +367,10 @@ export async function createSOSRecord(params) {
       if (error) {
         console.warn("Supabase anon SOS insert error, persisting to local store:", error.message);
       } else {
+        const secureId = payload.id || generateSecureUuid();
         const createdRecord = {
-          id: payload.id || `sos_${Date.now()}`,
           ...payload,
+          id: secureId,
           created_at: new Date().toISOString(),
           acknowledged_at: null,
           resolved_at: null,
@@ -347,10 +386,11 @@ export async function createSOSRecord(params) {
     console.warn("Network error during SOS creation, using local fallback:", err.message);
   }
 
-  // Fallback: Local record with client-generated UUID
+  // Fallback: Local record with client-generated secure UUID
+  const fallbackId = payload.id || generateSecureUuid();
   const fallbackRecord = {
-    id: payload.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sos_${Date.now()}`),
     ...payload,
+    id: fallbackId,
     created_at: new Date().toISOString(),
     acknowledged_at: null,
     resolved_at: null,

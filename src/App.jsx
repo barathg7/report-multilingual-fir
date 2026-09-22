@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Layout from "./Layout";
 import LandingPage from "./pages/LandingPage";
 import CitizenLogin from "./pages/CitizenLogin";
@@ -14,6 +14,8 @@ import EmergencySecurity from "./components/kavalan/EmergencySecurity";
 
 function AppRoutes() {
   const [showEmergency, setShowEmergency] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Listen for the "open-sos-panel" event fired by LandingPage's inline button
   useEffect(() => {
@@ -22,7 +24,7 @@ function AppRoutes() {
     return () => window.removeEventListener("open-sos-panel", handler);
   }, []);
 
-  // Global QuickShield Triggers: Ctrl+Shift+E and deep links (#quickshield / ?sos=quickshield)
+  // Global QuickShield & SOS Triggers: Ctrl+Shift+E and deep links (#quickshield / #sos / #emergency / search params)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.shiftKey && (e.key === "E" || e.key === "e")) {
@@ -31,7 +33,29 @@ function AppRoutes() {
       }
     };
     const checkDeepLink = () => {
-      if (window.location.hash.includes("quickshield") || window.location.search.includes("quickshield")) {
+      // 1. Exact matching for supported hash paths: #quickshield, #/quickshield, #sos, #/sos, #emergency, #/emergency
+      const rawHash = window.location.hash || "";
+      const hashPath = rawHash.replace(/^#\/?/, "").split("?")[0].replace(/\/+$/, "").toLowerCase();
+      const isMatchingHash = hashPath === "quickshield" || hashPath === "sos" || hashPath === "emergency";
+
+      // 2. Intentional matching for supported query parameter flags: ?sos=quickshield, ?quickshield, ?sos, ?emergency
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashQueryIdx = rawHash.indexOf("?");
+      const hashParams = hashQueryIdx !== -1 ? new URLSearchParams(rawHash.slice(hashQueryIdx)) : null;
+
+      const hasParam = (key) => searchParams.has(key) || Boolean(hashParams?.has(key));
+      const getParam = (key) => (searchParams.get(key) || hashParams?.get(key) || "").toLowerCase();
+
+      const sosVal = getParam("sos");
+      const emergencyVal = getParam("emergency");
+
+      const isMatchingSearch =
+        hasParam("quickshield") ||
+        sosVal === "quickshield" ||
+        (hasParam("sos") && (sosVal === "" || sosVal === "true" || sosVal === "1" || sosVal === "open")) ||
+        (hasParam("emergency") && (emergencyVal === "" || emergencyVal === "true" || emergencyVal === "1" || emergencyVal === "open"));
+
+      if (isMatchingHash || isMatchingSearch) {
         setShowEmergency(true);
       }
     };
@@ -44,10 +68,26 @@ function AppRoutes() {
     };
   }, []);
 
+  // Automatically open SOS Command Terminal when visiting /sos or /emergency routes
+  useEffect(() => {
+    if (location.pathname === "/sos" || location.pathname === "/emergency") {
+      setShowEmergency(true);
+    }
+  }, [location.pathname]);
+
+  const handleCloseEmergency = () => {
+    setShowEmergency(false);
+    if (location.pathname === "/sos" || location.pathname === "/emergency") {
+      navigate("/", { replace: true });
+    }
+  };
+
   return (
     <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/sos" element={<LandingPage />} />
+        <Route path="/emergency" element={<LandingPage />} />
         <Route path="/citizen-portal" element={<RecordStatement />} />
         <Route path="/citizen-login" element={<CitizenLogin />} />
         <Route path="/home" element={<Home />} />
@@ -66,7 +106,7 @@ function AppRoutes() {
       {/* Single global SOS modal — only one instance ever */}
       <EmergencySecurity
         showPanel={showEmergency}
-        onClosePanel={() => setShowEmergency(false)}
+        onClosePanel={handleCloseEmergency}
       />
     </>
   );
